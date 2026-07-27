@@ -227,10 +227,10 @@ Copy-Item .env.example .env
 ```
 
 Set real local passwords in `.env`; never commit it. Provision role with the
-`postgres` password entered only in your terminal:
+`postgres` password entered only in hidden prompts:
 
 ```powershell
-& 'E:\Programs\PostgreSQL\18\bin\psql.exe' -U postgres -d invoicepro -v app_password='choose-a-strong-app-password' -f database\scripts\provision-app-role.sql
+& 'E:\Programs\PostgreSQL\18\bin\psql.exe' -U postgres -d invoicepro -f database\scripts\provision-app-role.sql
 ```
 
 Then apply schema and start API:

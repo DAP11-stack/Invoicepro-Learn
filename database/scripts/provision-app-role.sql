@@ -1,11 +1,5 @@
 \set ON_ERROR_STOP on
 
-\if :{?app_password}
-\else
-  \echo 'Missing app_password. Run psql with -v app_password=your-strong-password.'
-  \quit 1
-\endif
-
 SELECT NOT EXISTS (
   SELECT 1 FROM pg_roles WHERE rolname = 'invoicepro_app'
 ) AS role_missing \gset
@@ -17,8 +11,7 @@ SELECT NOT EXISTS (
     NOCREATEDB
     NOCREATEROLE
     NOINHERIT
-    NOREPLICATION
-    PASSWORD :'app_password';
+    NOREPLICATION;
 \else
   ALTER ROLE invoicepro_app
     LOGIN
@@ -26,9 +19,10 @@ SELECT NOT EXISTS (
     NOCREATEDB
     NOCREATEROLE
     NOINHERIT
-    NOREPLICATION
-    PASSWORD :'app_password';
+    NOREPLICATION;
 \endif
+
+\password invoicepro_app
 
 GRANT CONNECT ON DATABASE invoicepro TO invoicepro_app;
 \connect invoicepro
