@@ -1,8 +1,12 @@
 import { createApp } from "./app.js";
+import { PostgresClientRepository } from "./clients/repository.js";
 import { environment } from "./config/env.js";
 import { checkDatabaseHealth, pool } from "./db/pool.js";
 
-const app = createApp({ healthCheck: checkDatabaseHealth });
+const app = createApp({
+  healthCheck: checkDatabaseHealth,
+  clientService: new PostgresClientRepository(pool)
+});
 
 const server = app.listen(environment.PORT, () => {
   console.log(`InvoicePro API listening on port ${environment.PORT}`);
