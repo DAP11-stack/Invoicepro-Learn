@@ -16,6 +16,11 @@ const client: Client = {
   createdAt: "2026-07-27T12:00:00.000Z",
   updatedAt: "2026-07-27T12:00:00.000Z"
 };
+const unusedInvoiceService = {
+  create: async () => {
+    throw new Error("not used");
+  }
+};
 
 function makeClientService(overrides: Partial<ClientService> = {}): ClientService {
   return {
@@ -32,7 +37,11 @@ function makeClientService(overrides: Partial<ClientService> = {}): ClientServic
 }
 
 function makeApp(clientService: ClientService) {
-  return createApp({ healthCheck: async () => undefined, clientService });
+  return createApp({
+    healthCheck: async () => undefined,
+    clientService,
+    invoiceService: unusedInvoiceService
+  });
 }
 
 describe("client API", () => {

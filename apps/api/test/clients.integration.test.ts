@@ -8,7 +8,16 @@ import { PostgresClientRepository } from "../src/clients/repository.js";
 import { checkDatabaseHealth, pool } from "../src/db/pool.js";
 
 const clientRepository = new PostgresClientRepository(pool);
-const app = createApp({ healthCheck: checkDatabaseHealth, clientService: clientRepository });
+const unusedInvoiceService = {
+  create: async () => {
+    throw new Error("not used");
+  }
+};
+const app = createApp({
+  healthCheck: checkDatabaseHealth,
+  clientService: clientRepository,
+  invoiceService: unusedInvoiceService
+});
 const clientIds = new Set<string>();
 const invoiceIds = new Set<string>();
 

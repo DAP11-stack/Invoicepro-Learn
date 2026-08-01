@@ -1,0 +1,147 @@
+import request from "supertest";
+import { describe, expect, it, vi } from "vitest";
+
+import { createApp } from "../src/app.js";
+import type { ClientService } from "../src/clients/types.js";
+import { ClientNotFoundError } from "../src/invoices/errors.js";
+import type { Invoice, InvoiceService } from "../src/invoices/types.js";
+
+const clientId = "8ee050d9-c8f5-48c8-8508-fc4ebd4237d5";
+const invoice: Invoice = {
+  id: "d3cad93f-9b43-4327-a234-1811efdd4668",
+  clientId,
+  invoiceNumber: "INV-202608-000001",
+  issueDate: "2026-08-01",
+  dueDate: "2026-08-31",
+  status: "DRAFT",
+  currency: "IDR",
+  taxRate: "11.00",
+  subtotal: "250000.00",
+  taxTotal: "27500.00",
+  grandTotal: "277500.00",
+  notes: null,
+  items: [],
+  createdAt: "2026-08-01T09:00:00.000Z",
+  updatedAt: "2026-08-01T09:00:00.000Z"
+};
+const unusedClientService: ClientService = {
+  list: async () => ({ data: [], pagination: { limit: 20, offset: 0, total: 0 } }),
+  create: async () => {
+    throw new Error("not used");
+  },
+  findById: async () => null,
+  update: async () => null,
+  delete: async () => false
+};
+
+function makeInvoiceService(overrides: Partial<InvoiceService> = {}): InvoiceService {
+  return {
+    create: vi.fn(async () => invoice),
+    ...overrides
+  };
+}
+
+function makeApp(invoiceService: InvoiceService) {
+  return createApp({
+    healthCheck: async () => undefined,
+    clientService: unusedClientService,
+    invoiceService
+  });
+}
+
+const validInput = {
+  clientId,
+  issueDate: "2026-08-01",
+  dueDate: "2026-08-31",
+  currency: "idr",
+  taxRate: 11,
+  items: [
+    { description: "Item A", quantity: 2, unitPrice: 100000 },
+    { description: "Item B", quantity: "1", unitPrice: "50000.00" }
+  ]
+};
+
+describe("invoice API", () => {
+  it("normalizes and creates a valid invoice", async () => {
+    const invoiceService = makeInvoiceService();
+    const response = await request(makeApp(invoiceService)).post("/api/v1/invoices").send(validInput);
+
+    expect(response.status).toBe(201);
+    expect(response.body.data).toEqual(invoice);
+    expect(invoiceService.create).toHaveBeenCalledWith({
+      clientId,
+      issueDate: "2026-08-01",
+      dueDate: "2026-08-31",
+      currency: "IDR",
+      taxRate: "11",
+      items: [
+        { description: "Item A", quantity: "2", unitPrice: "100000" },
+        { description: "Item B", quantity: "1", unitPrice: "50000.00" }
+      ]
+    });
+  });
+
+  it("rejects client-supplied totals", async () => {
+    const invoiceService = makeInvoiceService();
+    const response = await request(makeApp(invoiceService))
+      .post("/api/v1/invoices")
+      .send({ ...validInput, subtotal: "1.00", grandTotal: "1.00" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe("VALIDATION_ERROR");
+    expect(invoiceService.create).not.toHaveBeenCalled();
+  });
+
+  it("rejects a non-alphabetic currency code", async () => {
+    const response = await request(makeApp(makeInvoiceService()))
+      .post("/api/v1/invoices")
+      .send({ ...validInput, currency: "123" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.details).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "currency" })])
+    );
+  });
+
+  it("rejects invalid dates, empty items, and negative money", async () => {
+    const response = await request(makeApp(makeInvoiceService()))
+      .post("/api/v1/invoices")
+      .send({
+        ...validInput,
+        issueDate: "2026-08-31",
+        dueDate: "2026-08-01",
+        items: [{ description: "Invalid", quantity: "0", unitPrice: "-1" }]
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.details).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ path: "dueDate" }),
+        expect.objectContaining({ path: "items.0.quantity" }),
+        expect.objectContaining({ path: "items.0.unitPrice" })
+      ])
+    );
+  });
+
+  it("rejects year zero before the request reaches PostgreSQL", async () => {
+    const response = await request(makeApp(makeInvoiceService()))
+      .post("/api/v1/invoices")
+      .send({ ...validInput, issueDate: "0000-01-01", dueDate: "0000-01-02" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.details).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "issueDate" })])
+    );
+  });
+
+  it("returns not found when the selected client does not exist", async () => {
+    const response = await request(
+      makeApp(makeInvoiceService({ create: async () => Promise.reject(new ClientNotFoundError()) }))
+    )
+      .post("/api/v1/invoices")
+      .send(validInput);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toEqual({ code: "NOT_FOUND", message: "Client was not found." });
+  });
+});

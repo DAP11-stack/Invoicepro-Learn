@@ -12,10 +12,19 @@ const unusedClientService = {
   update: async () => null,
   delete: async () => false
 };
+const unusedInvoiceService = {
+  create: async () => {
+    throw new Error("not used");
+  }
+};
 
 describe("GET /api/v1/health", () => {
   it("returns service and database health", async () => {
-    const app = createApp({ healthCheck: async () => undefined, clientService: unusedClientService });
+    const app = createApp({
+      healthCheck: async () => undefined,
+      clientService: unusedClientService,
+      invoiceService: unusedInvoiceService
+    });
 
     const response = await request(app).get("/api/v1/health");
 
@@ -30,7 +39,8 @@ describe("GET /api/v1/health", () => {
   it("returns a safe error when database health check fails", async () => {
     const app = createApp({
       healthCheck: async () => Promise.reject(new Error("connection failed")),
-      clientService: unusedClientService
+      clientService: unusedClientService,
+      invoiceService: unusedInvoiceService
     });
 
     const response = await request(app).get("/api/v1/health");
@@ -47,7 +57,11 @@ describe("GET /api/v1/health", () => {
 
 describe("API error contract", () => {
   it("returns a validation error for malformed JSON", async () => {
-    const app = createApp({ healthCheck: async () => undefined, clientService: unusedClientService });
+    const app = createApp({
+      healthCheck: async () => undefined,
+      clientService: unusedClientService,
+      invoiceService: unusedInvoiceService
+    });
 
     const response = await request(app)
       .post("/api/v1/clients")
@@ -63,7 +77,11 @@ describe("API error contract", () => {
   });
 
   it("returns a JSON error for an unknown API route", async () => {
-    const app = createApp({ healthCheck: async () => undefined, clientService: unusedClientService });
+    const app = createApp({
+      healthCheck: async () => undefined,
+      clientService: unusedClientService,
+      invoiceService: unusedInvoiceService
+    });
 
     const response = await request(app).get("/api/v1/not-a-route");
 
