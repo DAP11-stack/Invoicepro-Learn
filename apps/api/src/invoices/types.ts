@@ -1,4 +1,5 @@
 export type InvoiceStatus = "DRAFT" | "SENT" | "OVERDUE" | "PAID";
+export type InvoiceTransitionTarget = Exclude<InvoiceStatus, "DRAFT">;
 
 export interface CreateInvoiceItemInput {
   description: string;
@@ -104,6 +105,11 @@ export interface InvoicePage {
   };
 }
 
+export interface InvoiceTransitionContext {
+  status: InvoiceStatus;
+  dueDate: string;
+}
+
 export interface InvoiceRepository {
   create(input: PersistInvoiceInput): Promise<Invoice>;
   updateDraft(
@@ -111,6 +117,10 @@ export interface InvoiceRepository {
     prepare: (current: Invoice) => PersistInvoiceInput
   ): Promise<Invoice | null>;
   deleteDraft(id: string): Promise<boolean>;
+  transitionStatus(
+    id: string,
+    resolveTarget: (current: InvoiceTransitionContext) => InvoiceTransitionTarget
+  ): Promise<Invoice | null>;
   list(filters: InvoiceListFilters): Promise<InvoicePage>;
   findById(id: string): Promise<InvoiceDetail | null>;
 }
@@ -119,6 +129,9 @@ export interface InvoiceService {
   create(input: CreateInvoiceInput): Promise<Invoice>;
   update(id: string, input: UpdateInvoiceInput): Promise<Invoice | null>;
   delete(id: string): Promise<boolean>;
+  send(id: string): Promise<Invoice | null>;
+  markOverdue(id: string): Promise<Invoice | null>;
+  markPaid(id: string): Promise<Invoice | null>;
   list(filters: InvoiceListFilters): Promise<InvoicePage>;
   findById(id: string): Promise<InvoiceDetail | null>;
 }

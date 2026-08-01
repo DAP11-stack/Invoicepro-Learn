@@ -58,6 +58,9 @@ export function createApp({ healthCheck, clientService, invoiceService }: AppDep
   app.get("/api/v1/invoices/:id", invoices.get);
   app.patch("/api/v1/invoices/:id", invoices.update);
   app.delete("/api/v1/invoices/:id", invoices.delete);
+  app.post("/api/v1/invoices/:id/send", invoices.send);
+  app.post("/api/v1/invoices/:id/mark-overdue", invoices.markOverdue);
+  app.post("/api/v1/invoices/:id/mark-paid", invoices.markPaid);
 
   app.use((_request: Request, response: Response) => {
     response.status(404).json({

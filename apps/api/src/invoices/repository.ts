@@ -10,6 +10,8 @@ import type {
   InvoicePage,
   InvoiceRepository,
   InvoiceStatus,
+  InvoiceTransitionContext,
+  InvoiceTransitionTarget,
   PersistInvoiceInput
 } from "./types.js";
 
@@ -313,6 +315,58 @@ export class PostgresInvoiceRepository implements InvoiceRepository {
       await connection.query("DELETE FROM invoices WHERE id = $1", [id]);
       await connection.query("COMMIT");
       return true;
+    } catch (error) {
+      await connection.query("ROLLBACK");
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async transitionStatus(
+    id: string,
+    resolveTarget: (current: InvoiceTransitionContext) => InvoiceTransitionTarget
+  ): Promise<Invoice | null> {
+    const connection = await this.pool.connect();
+
+    try {
+      await connection.query("BEGIN");
+      const invoiceResult = await connection.query<InvoiceRow>(
+        `SELECT ${invoiceColumns}
+         FROM invoices
+         WHERE id = $1
+         FOR UPDATE`,
+        [id]
+      );
+      const invoice = invoiceResult.rows[0];
+      if (invoice == null) {
+        await connection.query("COMMIT");
+        return null;
+      }
+
+      const current = toInvoiceBase(invoice);
+      const targetStatus = resolveTarget({
+        status: current.status,
+        dueDate: current.dueDate
+      });
+      const updatedResult = await connection.query<InvoiceRow>(
+        `UPDATE invoices
+         SET status = $2,
+             updated_at = clock_timestamp()
+         WHERE id = $1
+         RETURNING ${invoiceColumns}`,
+        [id, targetStatus]
+      );
+      const items = await connection.query<InvoiceItemRow>(
+        `SELECT id, description, quantity, unit_price, line_total, position
+         FROM invoice_items
+         WHERE invoice_id = $1
+         ORDER BY position`,
+        [id]
+      );
+
+      await connection.query("COMMIT");
+      return toInvoice(updatedResult.rows[0]!, items.rows);
     } catch (error) {
       await connection.query("ROLLBACK");
       throw error;

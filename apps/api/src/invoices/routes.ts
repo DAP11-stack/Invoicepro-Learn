@@ -3,12 +3,15 @@ import type { ZodError } from "zod";
 
 import {
   ClientNotFoundError,
+  InvalidInvoiceStatusTransitionError,
   InvoiceCalculationError,
   InvoiceDomainValidationError,
-  InvoiceNotEditableError
+  InvoiceNotEditableError,
+  InvoiceNotOverdueError
 } from "./errors.js";
 import {
   createInvoiceSchema,
+  invoiceActionSchema,
   invoiceIdSchema,
   invoiceListQuerySchema,
   updateInvoiceSchema
@@ -28,8 +31,56 @@ function validationError(response: Response, error: ZodError, message: string) {
   });
 }
 
+function createStatusTransitionHandler(
+  transition: (id: string) => ReturnType<InvoiceService["send"]>
+) {
+  return async (request: Request, response: Response, next: NextFunction) => {
+    const id = invoiceIdSchema.safeParse(request.params.id);
+    if (!id.success) {
+      validationError(response, id.error, "Invoice id is invalid.");
+      return;
+    }
+
+    const input = invoiceActionSchema.safeParse(request.body === undefined ? {} : request.body);
+    if (!input.success) {
+      validationError(response, input.error, "Invoice action input is invalid.");
+      return;
+    }
+
+    try {
+      const invoice = await transition(id.data);
+      if (invoice == null) {
+        response.status(404).json({
+          error: { code: "NOT_FOUND", message: "Invoice was not found." }
+        });
+        return;
+      }
+
+      response.status(200).json({ data: invoice });
+    } catch (error) {
+      if (error instanceof InvalidInvoiceStatusTransitionError) {
+        response.status(409).json({
+          error: { code: "INVALID_STATUS_TRANSITION", message: error.message }
+        });
+        return;
+      }
+      if (error instanceof InvoiceNotOverdueError) {
+        response.status(409).json({
+          error: { code: "INVOICE_NOT_OVERDUE", message: error.message }
+        });
+        return;
+      }
+
+      next(error);
+    }
+  };
+}
+
 export function createInvoiceHandlers(invoiceService: InvoiceService) {
   return {
+    send: createStatusTransitionHandler((id) => invoiceService.send(id)),
+    markOverdue: createStatusTransitionHandler((id) => invoiceService.markOverdue(id)),
+    markPaid: createStatusTransitionHandler((id) => invoiceService.markPaid(id)),
     list: async (request: Request, response: Response, next: NextFunction) => {
       const parsed = invoiceListQuerySchema.safeParse(request.query);
       if (!parsed.success) {

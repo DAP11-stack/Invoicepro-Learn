@@ -30,3 +30,17 @@ export class InvoiceNotEditableError extends Error {
     this.name = "InvoiceNotEditableError";
   }
 }
+
+export class InvalidInvoiceStatusTransitionError extends Error {
+  constructor(currentStatus: string, targetStatus: string) {
+    super(`Invoice status cannot transition from ${currentStatus} to ${targetStatus}.`);
+    this.name = "InvalidInvoiceStatusTransitionError";
+  }
+}
+
+export class InvoiceNotOverdueError extends Error {
+  constructor() {
+    super("Invoice cannot be marked overdue until after its due date.");
+    this.name = "InvoiceNotOverdueError";
+  }
+}

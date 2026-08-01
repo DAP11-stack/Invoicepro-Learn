@@ -85,6 +85,7 @@ const invoiceItemSchema = z
   .strict();
 
 export const invoiceIdSchema = z.string().uuid();
+export const invoiceActionSchema = z.object({}).strict();
 
 export const invoiceListQuerySchema = z
   .object({
