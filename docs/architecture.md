@@ -111,6 +111,14 @@ detail uses one joined invoice/client query plus one ordered item query. Query
 count therefore stays constant as the number of returned invoices or items
 grows; the read API does not perform N+1 lookups.
 
+Draft updates and deletes lock the invoice row with `SELECT ... FOR UPDATE`.
+The repository checks the locked status before any write, so a concurrent
+status change cannot race with a financial edit or deletion. Updates merge the
+partial payload with the locked persisted invoice, validate the complete result,
+recalculate totals, replace line items, and update the header in one transaction.
+Failures roll back the header and all item changes. Deleting a draft relies on
+the invoice-to-items foreign key cascade in the same transaction.
+
 ## Trust boundaries
 
 - Browser input is untrusted.

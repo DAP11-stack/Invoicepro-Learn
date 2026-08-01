@@ -120,3 +120,39 @@ Relevant errors:
 
 - `400 VALIDATION_ERROR`: the route parameter is not a UUID.
 - `404 NOT_FOUND`: no invoice has the requested UUID.
+
+## Update draft invoice
+
+`PATCH /invoices/:id`
+
+The request may include one or more of `clientId`, `issueDate`, `dueDate`,
+`currency`, `taxRate`, `notes`, or `items`. An empty object is rejected. When
+`items` is present it replaces the complete line-item collection and must
+contain between 1 and 100 items. Server-owned fields such as `invoiceNumber`,
+`status`, and all totals are rejected.
+
+The server merges partial input with the persisted invoice, validates the full
+date range, recalculates every financial value, and writes the header and items
+atomically. The invoice number and status do not change.
+
+Success: HTTP `200` with `{ "data": invoice }`.
+
+Relevant errors:
+
+- `400 VALIDATION_ERROR`: invalid route parameter, payload, merged date range,
+  or calculated value.
+- `404 NOT_FOUND`: the invoice or selected client does not exist.
+- `409 INVOICE_NOT_EDITABLE`: the invoice is no longer `DRAFT`.
+
+## Delete draft invoice
+
+`DELETE /invoices/:id`
+
+Success: HTTP `204` with no response body. Associated line items are deleted by
+the database foreign-key cascade.
+
+Relevant errors:
+
+- `400 VALIDATION_ERROR`: the route parameter is not a UUID.
+- `404 NOT_FOUND`: no invoice has the requested UUID.
+- `409 INVOICE_NOT_EDITABLE`: the invoice is no longer `DRAFT`.
