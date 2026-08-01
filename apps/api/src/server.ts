@@ -2,10 +2,15 @@ import { createApp } from "./app.js";
 import { PostgresClientRepository } from "./clients/repository.js";
 import { environment } from "./config/env.js";
 import { checkDatabaseHealth, pool } from "./db/pool.js";
+import { PostgresInvoiceRepository } from "./invoices/repository.js";
+import { InvoiceApplicationService } from "./invoices/service.js";
+
+const invoiceRepository = new PostgresInvoiceRepository(pool);
 
 const app = createApp({
   healthCheck: checkDatabaseHealth,
-  clientService: new PostgresClientRepository(pool)
+  clientService: new PostgresClientRepository(pool),
+  invoiceService: new InvoiceApplicationService(invoiceRepository)
 });
 
 const server = app.listen(environment.PORT, () => {

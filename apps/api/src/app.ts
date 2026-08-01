@@ -2,10 +2,13 @@ import express, { type Request, type Response } from "express";
 
 import { createClientHandlers } from "./clients/routes.js";
 import type { ClientService } from "./clients/types.js";
+import { createInvoiceHandlers } from "./invoices/routes.js";
+import type { InvoiceService } from "./invoices/types.js";
 
 export interface AppDependencies {
   healthCheck: () => Promise<void>;
   clientService: ClientService;
+  invoiceService: InvoiceService;
 }
 
 function isMalformedJsonError(error: unknown): boolean {
@@ -18,9 +21,10 @@ function isMalformedJsonError(error: unknown): boolean {
   );
 }
 
-export function createApp({ healthCheck, clientService }: AppDependencies) {
+export function createApp({ healthCheck, clientService, invoiceService }: AppDependencies) {
   const app = express();
   const clients = createClientHandlers(clientService);
+  const invoices = createInvoiceHandlers(invoiceService);
 
   app.use(express.json());
 
@@ -48,6 +52,8 @@ export function createApp({ healthCheck, clientService }: AppDependencies) {
   app.get("/api/v1/clients/:id", clients.get);
   app.patch("/api/v1/clients/:id", clients.update);
   app.delete("/api/v1/clients/:id", clients.delete);
+
+  app.post("/api/v1/invoices", invoices.create);
 
   app.use((_request: Request, response: Response) => {
     response.status(404).json({
