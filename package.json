@@ -15,6 +15,8 @@
     "test:api": "vitest run --config apps/api/vitest.config.ts",
     "test:web": "vitest run --config apps/web/vitest.config.ts",
     "test:integration": "vitest run --config apps/api/vitest.integration.config.ts",
+    "test:e2e": "playwright test --config apps/web/playwright.config.ts",
+    "test:e2e:headed": "playwright test --config apps/web/playwright.config.ts --headed",
     "dev:api": "tsx watch apps/api/src/server.ts",
     "dev:web": "vite --config apps/web/vite.config.ts",
     "start:api": "node apps/api/dist/server.js",
@@ -35,6 +37,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.1",
     "@types/express": "^5.0.3",
