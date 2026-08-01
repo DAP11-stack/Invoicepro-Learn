@@ -8,6 +8,7 @@
     "build": "tsc -p apps/api/tsconfig.json",
     "typecheck": "tsc --noEmit -p apps/api/tsconfig.json",
     "test": "vitest run --config apps/api/vitest.config.ts",
+    "test:integration": "vitest run --config apps/api/vitest.integration.config.ts",
     "dev:api": "tsx watch apps/api/src/server.ts",
     "start:api": "node apps/api/dist/server.js",
     "db:migrate": "tsx apps/api/src/scripts/migrate.ts"
