@@ -1,325 +1,301 @@
 # InvoicePro
 
-InvoicePro is a local-first, full-stack invoice management MVP for small B2B
-sales and accounting workflows. It is built as a learning and portfolio project:
-small enough to finish, but complete enough to demonstrate frontend, backend,
-database, testing, and business-rule design.
+InvoicePro is a local-first REST API for managing B2B clients and invoices. It
+focuses on reliable financial calculations, explicit invoice lifecycle rules,
+transactional PostgreSQL writes, and a reproducible test suite.
 
-> Current maturity: **Milestone 1 — Data and API (complete)**
+> **Project status:** Functional backend prototype. The data and API milestone
+> is complete; the browser interface, PDF generation, and deployment are still
+> in development.
 
-## Problem
+## Why this project exists
 
-Small teams often track clients, invoice items, totals, due dates, and payment
-status across separate spreadsheets or documents. This creates duplicate work
-and makes invoice history difficult to verify.
+Small businesses often manage client records, invoice line items, totals, due
+dates, and payment status across disconnected spreadsheets or documents.
+InvoicePro explores how those workflows can be represented by one consistent
+data model with server-authoritative business rules.
 
-InvoicePro keeps one reliable local record for:
+The current MVP targets a single local sales or accounting operator. It does
+not yet include authentication, multiple organizations, payment processing, or
+other production SaaS concerns.
 
-- Client details.
-- Invoice line items.
-- Server-calculated financial totals.
-- Invoice status and due dates.
-- Printable PDF invoices.
-
-## Target user
-
-A single sales or accounting operator managing invoices for a small B2B
-business. Multi-user access is intentionally excluded from the MVP.
-
-## MVP outcome
-
-The project is complete when this workflow works from the browser:
-
-1. Create a client.
-2. Create a draft invoice with one or more line items.
-3. Save the invoice in PostgreSQL.
-4. Verify subtotal, tax, and total calculated by the server.
-5. Move the invoice through valid status changes.
-6. Generate a PDF.
-7. Reload the application and find the same stored data.
-8. Pass automated tests for the critical workflow.
-
-## MVP scope
+## Implemented features
 
 ### Client management
 
-- Create, view, update, and list clients.
-- Store business name, contact name, email, phone, billing address, and tax ID.
-- Reject invalid input.
+- Create, list, retrieve, and update clients.
+- Store business, contact, billing, and tax information.
+- Validate all API input with explicit schemas.
 - Prevent deletion when a client is referenced by an invoice.
 
 ### Invoice management
 
-- Create, view, update, list, and delete draft invoices.
-- Add one or more line items.
-- Generate unique invoice numbers on the server.
-- Filter invoices by status or client.
-- Allow financial edits only while an invoice is `DRAFT`.
+- Create, list, retrieve, update, and delete draft invoices.
+- Store one or more ordered line items per invoice.
+- Generate concurrency-safe invoice numbers in PostgreSQL.
+- Filter invoice lists by status or client with bounded pagination.
+- Reject financial edits and deletion after an invoice leaves `DRAFT`.
 
 ### Financial rules
 
-- Store money as PostgreSQL `NUMERIC(15,2)`.
-- Calculate money with `decimal.js`; never trust browser totals.
-- Round monetary results to two decimal places.
-- Use these formulas:
-
-```text
-line_total = quantity × unit_price
-subtotal   = sum(line_total)
-tax_total  = subtotal × (tax_rate / 100)
-grand_total = subtotal + tax_total
-```
-
-- MVP supports one tax rate per invoice and no discounts.
-- Quantity must be greater than zero.
-- Unit price and tax rate cannot be negative.
+- Calculate line totals, subtotal, tax, and grand total on the server.
+- Use `decimal.js` and PostgreSQL `NUMERIC` instead of binary floating point.
+- Apply `ROUND_HALF_UP` to monetary results.
+- Reject negative prices, invalid tax rates, and non-positive quantities.
+- Treat totals as server-owned values; caller-provided financial fields are
+  rejected at the validation boundary.
 
 ### Status workflow
 
 ```text
-DRAFT -> SENT -> PAID
-                 ^
-SENT  -> OVERDUE |
+DRAFT ──> SENT ──> PAID
+             │        ▲
+             └─> OVERDUE
 ```
 
-- `DRAFT`: editable and not yet issued.
-- `SENT`: issued; financial fields become read-only.
-- `OVERDUE`: unpaid after due date.
-- `PAID`: final paid state.
-- Valid transitions: `DRAFT → SENT`, `SENT → PAID`,
-  `SENT → OVERDUE`, and `OVERDUE → PAID`.
-- Status changes are validated by the server.
+Valid transitions are:
 
-### PDF
+- `DRAFT → SENT`
+- `SENT → PAID`
+- `SENT → OVERDUE` after the due date has passed
+- `OVERDUE → PAID`
 
-- Generate a local PDF for `SENT`, `OVERDUE`, or `PAID` invoices.
-- Include business identity, client, invoice number, dates, line items, and
-  totals.
+`PAID` is terminal. Status changes use database row locks, so concurrent
+duplicate actions cannot both succeed.
 
-## Non-goals
+## Engineering highlights
 
-These features are excluded to protect the Rp0 budget and keep scope finishable:
+- Layered TypeScript design: route, service, repository, and PostgreSQL.
+- Atomic invoice header and line-item writes with rollback on failure.
+- `SELECT ... FOR UPDATE` protects draft mutations and status transitions from
+  race conditions.
+- PostgreSQL sequence-backed invoice numbers remain unique under concurrency.
+- Constant-query invoice list/detail reads avoid N+1 database access.
+- Runtime and migration credentials are separated into different environment
+  files.
+- The restricted application role cannot access migration history or receive
+  privileges on future tables automatically.
+- Consistent JSON error contracts without database details or stack traces.
 
-- Authentication, roles, multi-user, or multi-tenant support.
-- Payment gateway or money movement.
-- Real email delivery.
-- Cloud hosting, paid database, domain, or paid API.
-- External accounting integration.
-- Multiple currencies in one invoice.
-- Discounts, refunds, recurring invoices, and partial payments.
-- Production compliance or tax certification.
+## Technology stack
 
-## Planned stack
-
-| Area | Choice | Reason |
-|---|---|---|
-| Frontend | React, Vite, TypeScript | Fast local UI, typed components |
-| Backend | Node.js, Express, TypeScript | Small, explicit REST API |
-| Validation | Zod | Shared, readable input rules |
-| Database | PostgreSQL with `pg` | Real relational DB and visible SQL |
-| Money | `decimal.js` | Avoid floating-point errors |
-| PDF | PDFKit | Local PDF generation without browser automation |
-| Unit/API tests | Vitest and Supertest | Fast business-rule and endpoint tests |
-| End-to-end test | Playwright | Verify critical browser workflow |
-| Workspace | Root npm scripts + TypeScript | One repository, few moving parts |
-
-All required software and libraries are free for local learning use.
+| Area | Technology |
+|---|---|
+| Runtime | Node.js 22+ |
+| Language | TypeScript |
+| API | Express 5 |
+| Validation | Zod |
+| Database | PostgreSQL with `pg` |
+| Financial arithmetic | `decimal.js` |
+| Testing | Vitest and Supertest |
 
 ## Architecture
 
 ```text
-React web app
-    |
-    | JSON over REST
-    v
-Express API
-    |
-    | validated queries and transactions
-    v
-PostgreSQL
-
-Express API -> PDFKit -> local PDF response
+HTTP client
+    │
+    ▼
+Express routes ── validation and HTTP error mapping
+    │
+    ▼
+Application services ── calculations and lifecycle rules
+    │
+    ▼
+PostgreSQL repositories ── parameterized queries and transactions
+    │
+    ▼
+PostgreSQL ── relational constraints and persistent source of truth
 ```
 
-The browser handles presentation and form interaction. The API owns validation,
-status transitions, invoice-number generation, and financial calculations.
-PostgreSQL is the source of truth.
+The API owns invoice numbers, totals, allowed status changes, and resource
+mutation rules. PostgreSQL enforces relational integrity and stores money as
+fixed-precision numeric values.
 
-Detailed design: [docs/architecture.md](docs/architecture.md)
+See [Architecture](docs/architecture.md) for the detailed design and
+[API Contract](docs/api.md) for request, response, and error behavior.
 
-Local database setup: [docs/local-development.md](docs/local-development.md)
-
-## Planned data model
-
-- `clients`: billing and contact identity.
-- `invoices`: client reference, dates, tax rate, totals, and status.
-- `invoice_items`: description, quantity, unit price, and line total.
-
-Each invoice belongs to one client. Each invoice has one or more items.
-Invoice creation and item creation use one database transaction.
-
-## API
+## API overview
 
 Base path: `/api/v1`
 
-```text
-GET    /health
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/health` | Check API and database health |
+| `GET` | `/clients` | List clients |
+| `POST` | `/clients` | Create a client |
+| `GET` | `/clients/:id` | Retrieve a client |
+| `PATCH` | `/clients/:id` | Update a client |
+| `DELETE` | `/clients/:id` | Delete an unreferenced client |
+| `GET` | `/invoices` | List and filter invoices |
+| `POST` | `/invoices` | Create a draft invoice |
+| `GET` | `/invoices/:id` | Retrieve invoice details |
+| `PATCH` | `/invoices/:id` | Update a draft invoice |
+| `DELETE` | `/invoices/:id` | Delete a draft invoice |
+| `POST` | `/invoices/:id/send` | Move `DRAFT` to `SENT` |
+| `POST` | `/invoices/:id/mark-overdue` | Move past-due `SENT` to `OVERDUE` |
+| `POST` | `/invoices/:id/mark-paid` | Move `SENT` or `OVERDUE` to `PAID` |
 
-GET    /clients
-POST   /clients
-GET    /clients/:id
-PATCH  /clients/:id
-DELETE /clients/:id
+## Getting started
 
-GET    /invoices
-POST   /invoices
-GET    /invoices/:id
-PATCH  /invoices/:id
-DELETE /invoices/:id
-POST   /invoices/:id/send
-POST   /invoices/:id/mark-overdue
-POST   /invoices/:id/mark-paid
-GET    /invoices/:id/pdf
+### Prerequisites
+
+- Node.js 22 or newer
+- npm 10 or newer
+- PostgreSQL with the `psql` command-line client
+
+### 1. Install dependencies
+
+```bash
+git clone https://github.com/DAP11-stack/Invoicepro-Learn.git
+cd Invoicepro-Learn
+npm install
 ```
 
-Client CRUD plus invoice create, list, detail, draft update/delete, and status
-workflow endpoints are implemented. The PDF endpoint remains planned. The
-current request, response, validation, filtering, pagination, and error contract is documented in
-[docs/api.md](docs/api.md).
+### 2. Create the local database and restricted application role
 
-## Repository structure
+Create an empty `invoicepro` database using PostgreSQL administration tools:
 
-```text
-.
-├── apps/
-│   ├── api/            # Express API
-│   └── web/            # React application
-├── database/           # SQL migrations and seed data
-├── docs/               # Scope, architecture, and decisions
-├── tests/              # Cross-application end-to-end tests
-├── README.md
-└── .gitignore
+```bash
+psql -U postgres -c "CREATE DATABASE invoicepro;"
 ```
 
-## Milestones
+Provision the restricted runtime role. The script prompts for its password
+without storing that password in the repository:
 
-- [x] **Milestone 0 — Foundation:** define problem, scope, rules, architecture,
-  completion criteria, and repository baseline.
-- [x] **Milestone 1 — Data and API:** workspace, restricted database role,
-  schema migrations, health API, Client CRUD, server-authoritative financial
-  calculations, atomic invoice creation and draft updates, filtered invoice
-  lists, invoice detail, draft deletion, and atomic status workflow exist.
-- [ ] **Milestone 2 — Web workflow:** client and invoice screens connected to
-  the API, including loading, empty, success, and error states.
-- [~] **Milestone 3 — Business workflow:** status rules and overdue handling are
-  implemented. PDF generation remains.
-- [ ] **Milestone 4 — Portfolio release:** end-to-end test, screenshots, demo,
-  final README evidence, security review, and GitHub publication.
-
-## Local setup
-
-Install workspace dependencies:
-
-```powershell
-npm.cmd install
+```bash
+psql -U postgres -d invoicepro -f database/scripts/provision-app-role.sql
 ```
 
-Create separate runtime and migration environment files:
+### 3. Configure local environment files
+
+On macOS or Linux:
+
+```bash
+cp .env.example .env
+cp .env.migration.example .env.migration
+```
+
+On PowerShell:
 
 ```powershell
 Copy-Item .env.example .env
 Copy-Item .env.migration.example .env.migration
 ```
 
-Set the restricted application password in `.env` and the PostgreSQL admin
-password only in `.env.migration`; never commit either file. Provision the
-application role with the `postgres` password entered only in hidden prompts:
+Replace the placeholder passwords:
 
-If upgrading an existing checkout, copy `DATABASE_ADMIN_URL` from `.env` to
-`.env.migration`, then remove it from `.env`.
+- `.env` contains the restricted `invoicepro_app` runtime connection.
+- `.env.migration` contains the admin connection used only by migrations.
 
-```powershell
-& 'E:\Programs\PostgreSQL\18\bin\psql.exe' -U postgres -d invoicepro -f database\scripts\provision-app-role.sql
+Both real environment files are ignored by Git. The API runtime never loads
+`DATABASE_ADMIN_URL`.
+
+### 4. Apply migrations and start the API
+
+```bash
+npm run db:migrate
+npm run dev:api
 ```
 
-Then apply schema and start API:
+The default API URL is `http://localhost:3000`. Verify it with:
 
-```powershell
-npm.cmd run db:migrate
-npm.cmd run dev:api
+```bash
+curl http://localhost:3000/api/v1/health
 ```
 
-Health check: `GET http://localhost:3000/api/v1/health`.
+Expected response:
 
-Run fast route tests and PostgreSQL integration tests separately:
-
-```powershell
-npm.cmd test
-npm.cmd run test:integration
+```json
+{
+  "status": "ok",
+  "service": "invoicepro-api",
+  "database": "connected"
+}
 ```
 
-Current machine check:
+Machine-specific PostgreSQL notes are kept in
+[Local Development](docs/local-development.md).
 
-- Node.js: available.
-- Git: available.
-- npm: available through `npm.cmd` because PowerShell script execution blocks
-  `npm.ps1`.
-- PostgreSQL 18.4: installed locally on the external SSD.
-- PostgreSQL service: `postgresql-x64-18`; start it before migration or API use.
-- Development database: `invoicepro`.
-- PostgreSQL CLI: available at
-  `E:\Programs\PostgreSQL\18\bin\psql.exe`; not yet added to `PATH`.
+## Validation
 
-No real credential belongs in this repository. Runtime credentials use the
-ignored `.env`; migration-only admin credentials use the ignored
-`.env.migration`. Their committed `.example` files contain placeholders only.
+Run the fast unit and API tests:
 
-## Validation status
+```bash
+npm test
+```
 
-Milestone 0 validation is complete. Milestone 1 currently provides the
-workspace, schema migrations, database-backed health API, and Client CRUD API.
+Run PostgreSQL-backed integration tests after configuring and migrating the
+local database:
 
-Validated at this stage:
+```bash
+npm run test:integration
+```
 
-- Active project contained no legacy implementation.
-- MVP has a defined target user and end-to-end workflow.
-- Paid services are not required.
-- Financial and status rules have one server-side authority.
-- Scope and non-goals are explicit.
-- Portfolio evidence requirements are defined.
-- PostgreSQL 18.4 installation and service configuration were verified.
-- The `invoicepro` database previously accepted a verified pgAdmin connection.
-- Verification query returned database `invoicepro`, user `postgres`, and one
-  PostgreSQL 18.4 server row.
-- Migrations `001_initial_schema.sql` and
-  `002_restrict_app_role_privileges.sql` are applied, along with
-  `003_invoice_number_sequence.sql`.
-- Database privilege audit confirms `invoicepro_app` has CRUD access to business
-  tables and no access to `schema_migrations` or future tables by default.
-- Forty-nine unit/API tests and seventeen PostgreSQL integration tests pass.
-- TypeScript typecheck, production build, and dependency audit pass.
+Run static and production compilation checks:
 
-## Portfolio evidence required before release
+```bash
+npm run typecheck
+npm run build
+```
 
-- Working application with persisted PostgreSQL data.
-- Automated test output for calculation, API, and critical browser workflow.
-- Root README with reproducible setup and usage steps.
-- Architecture and data-model documentation.
-- Screenshots or short demo of the complete workflow.
-- No exposed secrets.
-- Clear limitations and honest project maturity.
+At this revision, the validated suite contains:
+
+- 49 passing unit/API tests.
+- 17 passing PostgreSQL integration tests.
+- Coverage for financial rounding, validation, rollback, access restrictions,
+  unique invoice numbering, draft-only mutations, status transitions, and
+  concurrent duplicate actions.
+- A clean high-severity dependency audit.
+
+Integration tests create uniquely identified records and remove only those
+records during teardown; they do not truncate shared tables.
+
+## Repository structure
+
+```text
+.
+├── apps/api/                 # Express API, domain logic, and tests
+├── database/migrations/      # Ordered PostgreSQL migrations
+├── database/scripts/         # Restricted-role provisioning
+├── docs/                     # Scope, architecture, API, and local setup
+├── .env.example              # Runtime configuration template
+├── .env.migration.example    # Migration configuration template
+└── package.json              # Workspace commands and dependencies
+```
+
+## Roadmap
+
+- [x] PostgreSQL schema, migrations, and restricted runtime role
+- [x] Client CRUD API
+- [x] Invoice calculations and atomic draft workflow
+- [x] Filtered invoice reads and complete invoice details
+- [x] Draft update/delete rules
+- [x] Invoice status lifecycle and concurrency protection
+- [ ] React browser workflow with responsive loading, empty, success, and error states
+- [ ] PDF generation for issued invoices
+- [ ] End-to-end browser tests
+- [ ] Screenshots, demo, and deployment documentation
+- [ ] Production-oriented authentication, authorization, and multi-tenant design
 
 ## Current limitations
 
-- Client CRUD routes and repository pass PostgreSQL-backed integration tests.
-- Invoice creation, draft update/delete, financial calculations, filtered
-  lists, detail reads, and status workflow exist. PDF generation and frontend
-  screens do not exist yet.
-- API and migration commands require their separate local environment files.
-- PostgreSQL CLI is installed but not globally available on `PATH`.
-- API contracts and UI wireframes are not yet frozen.
-- No deployment is planned for MVP; demo runs locally.
+- The project currently exposes an API only; the browser UI is not implemented.
+- Overdue status is triggered through an explicit API action, not a scheduler.
+- PDF generation and email delivery are not implemented.
+- Authentication, authorization, and tenant isolation are outside the current
+  local MVP.
+- Discounts, partial payments, refunds, and recurring invoices are unsupported.
+- This project is not a certified accounting or tax-compliance system.
+- No hosted demo is available yet.
+
+## Portfolio scope
+
+This project demonstrates backend API design, relational data modeling,
+fixed-precision financial calculations, transaction design, concurrency
+control, input validation, security boundaries, automated testing, and
+technical documentation. A browser demo and deployment evidence are still
+required before the project can be classified as portfolio-ready.
 
 ## License
 
-License decision is deferred until public GitHub publication.
+No open-source license has been selected yet.
