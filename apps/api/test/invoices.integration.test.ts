@@ -139,6 +139,59 @@ describe("Invoice API with PostgreSQL", () => {
     expect(invoiceCount.rows[0]?.total).toBe(0);
   });
 
+  it("lists filtered invoices and returns complete persisted detail", async () => {
+    const marker = randomUUID();
+    const clientId = await createTestClient(marker);
+    const payload = {
+      clientId,
+      issueDate: "2026-08-01",
+      dueDate: "2026-08-31",
+      taxRate: "11",
+      items: [
+        { description: "First position", quantity: "1", unitPrice: "100" },
+        { description: "Second position", quantity: "2", unitPrice: "50" }
+      ]
+    };
+    const createdResponses = await Promise.all([
+      request(app).post("/api/v1/invoices").send(payload),
+      request(app).post("/api/v1/invoices").send(payload)
+    ]);
+    for (const response of createdResponses) invoiceIds.add(response.body.data.id as string);
+
+    const page = await request(app).get(
+      `/api/v1/invoices?limit=1&offset=0&status=DRAFT&clientId=${clientId}`
+    );
+    const emptyPage = await request(app).get(
+      `/api/v1/invoices?limit=1&offset=100&status=DRAFT&clientId=${clientId}`
+    );
+    const detail = await request(app).get(`/api/v1/invoices/${createdResponses[0]!.body.data.id}`);
+
+    expect(page.status).toBe(200);
+    expect(page.body.data).toHaveLength(1);
+    expect(page.body.data[0]).not.toHaveProperty("items");
+    expect(page.body.data[0].client).toEqual(
+      expect.objectContaining({
+        id: clientId,
+        businessName: `PT Invoice Integration ${marker}`
+      })
+    );
+    expect(page.body.pagination).toEqual({ limit: 1, offset: 0, total: 2 });
+    expect(emptyPage.body).toEqual({
+      data: [],
+      pagination: { limit: 1, offset: 100, total: 2 }
+    });
+
+    expect(detail.status).toBe(200);
+    expect(detail.body.data.client).toEqual(
+      expect.objectContaining({
+        id: clientId,
+        businessName: `PT Invoice Integration ${marker}`,
+        billingAddress: "Jl. Invoice Integration 1, Jakarta"
+      })
+    );
+    expect(detail.body.data.items.map((item: { position: number }) => item.position)).toEqual([1, 2]);
+  });
+
   it("generates unique invoice numbers for concurrent requests", async () => {
     const clientId = await createTestClient(randomUUID());
     const payload = {

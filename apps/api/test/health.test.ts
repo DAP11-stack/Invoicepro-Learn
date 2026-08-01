@@ -15,7 +15,9 @@ const unusedClientService = {
 const unusedInvoiceService = {
   create: async () => {
     throw new Error("not used");
-  }
+  },
+  list: async () => ({ data: [], pagination: { limit: 20, offset: 0, total: 0 } }),
+  findById: async () => null
 };
 
 describe("GET /api/v1/health", () => {

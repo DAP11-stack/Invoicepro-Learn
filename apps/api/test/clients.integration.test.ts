@@ -11,7 +11,9 @@ const clientRepository = new PostgresClientRepository(pool);
 const unusedInvoiceService = {
   create: async () => {
     throw new Error("not used");
-  }
+  },
+  list: async () => ({ data: [], pagination: { limit: 20, offset: 0, total: 0 } }),
+  findById: async () => null
 };
 const app = createApp({
   healthCheck: checkDatabaseHealth,

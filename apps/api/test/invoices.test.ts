@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { createApp } from "../src/app.js";
 import type { ClientService } from "../src/clients/types.js";
 import { ClientNotFoundError } from "../src/invoices/errors.js";
-import type { Invoice, InvoiceService } from "../src/invoices/types.js";
+import type { Invoice, InvoiceDetail, InvoiceListItem, InvoiceService } from "../src/invoices/types.js";
 
 const clientId = "8ee050d9-c8f5-48c8-8508-fc4ebd4237d5";
 const invoice: Invoice = {
@@ -24,6 +24,27 @@ const invoice: Invoice = {
   createdAt: "2026-08-01T09:00:00.000Z",
   updatedAt: "2026-08-01T09:00:00.000Z"
 };
+const { items: _invoiceItems, ...invoiceSummary } = invoice;
+const invoiceListItem: InvoiceListItem = {
+  ...invoiceSummary,
+  client: {
+    id: clientId,
+    businessName: "PT Contoh Jaya",
+    email: "rani@contoh.test"
+  }
+};
+const invoiceDetail: InvoiceDetail = {
+  ...invoice,
+  client: {
+    id: clientId,
+    businessName: "PT Contoh Jaya",
+    contactName: "Rani",
+    email: "rani@contoh.test",
+    phone: "+628123456789",
+    billingAddress: "Jl. Contoh 1, Jakarta",
+    taxId: "01.234.567.8-901.000"
+  }
+};
 const unusedClientService: ClientService = {
   list: async () => ({ data: [], pagination: { limit: 20, offset: 0, total: 0 } }),
   create: async () => {
@@ -37,6 +58,11 @@ const unusedClientService: ClientService = {
 function makeInvoiceService(overrides: Partial<InvoiceService> = {}): InvoiceService {
   return {
     create: vi.fn(async () => invoice),
+    list: vi.fn(async (filters) => ({
+      data: [invoiceListItem],
+      pagination: { limit: filters.limit, offset: filters.offset, total: 1 }
+    })),
+    findById: vi.fn(async () => invoiceDetail),
     ...overrides
   };
 }
@@ -62,6 +88,56 @@ const validInput = {
 };
 
 describe("invoice API", () => {
+  it("lists invoices with validated pagination and filters", async () => {
+    const invoiceService = makeInvoiceService();
+    const response = await request(makeApp(invoiceService)).get(
+      `/api/v1/invoices?limit=10&offset=5&status=PAID&clientId=${clientId}`
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.pagination).toEqual({ limit: 10, offset: 5, total: 1 });
+    expect(invoiceService.list).toHaveBeenCalledWith({
+      limit: 10,
+      offset: 5,
+      status: "PAID",
+      clientId
+    });
+  });
+
+  it("rejects invalid or unknown list filters", async () => {
+    const app = makeApp(makeInvoiceService());
+    const invalidStatus = await request(app).get("/api/v1/invoices?status=UNKNOWN");
+    const unknownFilter = await request(app).get("/api/v1/invoices?sort=total");
+    const unsafeOffset = await request(app).get("/api/v1/invoices?offset=999999999999999999999");
+
+    expect(invalidStatus.status).toBe(400);
+    expect(invalidStatus.body.error.code).toBe("VALIDATION_ERROR");
+    expect(unknownFilter.status).toBe(400);
+    expect(unknownFilter.body.error.code).toBe("VALIDATION_ERROR");
+    expect(unsafeOffset.status).toBe(400);
+    expect(unsafeOffset.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("returns invoice detail and validates the invoice id", async () => {
+    const app = makeApp(makeInvoiceService());
+    const response = await request(app).get(`/api/v1/invoices/${invoice.id}`);
+    const invalid = await request(app).get("/api/v1/invoices/not-a-uuid");
+
+    expect(response.status).toBe(200);
+    expect(response.body.data).toEqual(invoiceDetail);
+    expect(invalid.status).toBe(400);
+    expect(invalid.body.error.message).toBe("Invoice id is invalid.");
+  });
+
+  it("returns not found for an unknown invoice", async () => {
+    const response = await request(
+      makeApp(makeInvoiceService({ findById: async () => null }))
+    ).get(`/api/v1/invoices/${invoice.id}`);
+
+    expect(response.status).toBe(404);
+    expect(response.body.error).toEqual({ code: "NOT_FOUND", message: "Invoice was not found." });
+  });
+
   it("normalizes and creates a valid invoice", async () => {
     const invoiceService = makeInvoiceService();
     const response = await request(makeApp(invoiceService)).post("/api/v1/invoices").send(validInput);
