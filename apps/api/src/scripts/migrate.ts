@@ -1,9 +1,11 @@
-import "dotenv/config";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { config } from "dotenv";
 import { Pool } from "pg";
 import { z } from "zod";
+
+config({ path: ".env.migration" });
 
 const migrationEnvironment = z.object({
   DATABASE_ADMIN_URL: z.string().url()

@@ -61,9 +61,6 @@ CREATE INDEX invoices_status_idx ON invoices(status);
 CREATE INDEX invoice_items_invoice_id_idx ON invoice_items(invoice_id);
 
 GRANT USAGE ON SCHEMA public TO invoicepro_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO invoicepro_app;
-GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO invoicepro_app;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO invoicepro_app;
-ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
-  GRANT USAGE, SELECT ON SEQUENCES TO invoicepro_app;
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON TABLE clients, invoices, invoice_items
+  TO invoicepro_app;

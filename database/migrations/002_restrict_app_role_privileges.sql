@@ -1,0 +1,12 @@
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM invoicepro_app;
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM invoicepro_app;
+
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL ON TABLES FROM invoicepro_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public
+  REVOKE ALL ON SEQUENCES FROM invoicepro_app;
+
+GRANT USAGE ON SCHEMA public TO invoicepro_app;
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON TABLE clients, invoices, invoice_items
+  TO invoicepro_app;

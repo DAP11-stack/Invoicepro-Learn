@@ -1,4 +1,4 @@
-import "dotenv/config";
+import { config } from "dotenv";
 import { z } from "zod";
 
 const environmentSchema = z.object({
@@ -7,4 +7,15 @@ const environmentSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development")
 });
 
-export const environment = environmentSchema.parse(process.env);
+function loadEnvironment() {
+  const runtimeFileEnvironment: Record<string, string> = {};
+  config({ path: ".env", processEnv: runtimeFileEnvironment });
+
+  return environmentSchema.parse({
+    DATABASE_URL: process.env.DATABASE_URL ?? runtimeFileEnvironment.DATABASE_URL,
+    PORT: process.env.PORT ?? runtimeFileEnvironment.PORT,
+    NODE_ENV: process.env.NODE_ENV ?? runtimeFileEnvironment.NODE_ENV
+  });
+}
+
+export const environment = loadEnvironment();
