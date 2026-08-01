@@ -5,11 +5,18 @@
   "type": "module",
   "description": "Local-first B2B invoice management MVP.",
   "scripts": {
-    "build": "tsc -p apps/api/tsconfig.json",
-    "typecheck": "tsc --noEmit -p apps/api/tsconfig.json",
-    "test": "vitest run --config apps/api/vitest.config.ts",
+    "build": "npm run build:api && npm run build:web",
+    "build:api": "tsc -p apps/api/tsconfig.json",
+    "build:web": "vite build --config apps/web/vite.config.ts",
+    "typecheck": "npm run typecheck:api && npm run typecheck:web",
+    "typecheck:api": "tsc --noEmit -p apps/api/tsconfig.json",
+    "typecheck:web": "tsc --noEmit -p apps/web/tsconfig.json",
+    "test": "npm run test:api && npm run test:web",
+    "test:api": "vitest run --config apps/api/vitest.config.ts",
+    "test:web": "vitest run --config apps/web/vitest.config.ts",
     "test:integration": "vitest run --config apps/api/vitest.integration.config.ts",
     "dev:api": "tsx watch apps/api/src/server.ts",
+    "dev:web": "vite --config apps/web/vite.config.ts",
     "start:api": "node apps/api/dist/server.js",
     "db:migrate": "tsx apps/api/src/scripts/migrate.ts"
   },
@@ -23,16 +30,25 @@
     "express": "^5.1.0",
     "pdfkit": "^0.19.1",
     "pg": "^8.16.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/express": "^5.0.3",
     "@types/node": "^24.3.0",
     "@types/pdfkit": "^0.17.6",
     "@types/pg": "^8.15.5",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^5.1.4",
+    "jsdom": "^30.0.1",
     "supertest": "^7.1.4",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
+    "vite": "^7.3.6",
     "vitest": "^3.2.4"
   }
 }
