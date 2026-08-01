@@ -78,6 +78,17 @@ const invoiceItemSchema = z
   })
   .strict();
 
+export const invoiceIdSchema = z.string().uuid();
+
+export const invoiceListQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(100).default(20),
+    offset: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
+    status: z.enum(["DRAFT", "SENT", "OVERDUE", "PAID"]).optional(),
+    clientId: z.string().uuid().optional()
+  })
+  .strict();
+
 export const createInvoiceSchema = z
   .object({
     clientId: z.string().uuid(),

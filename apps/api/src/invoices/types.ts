@@ -57,10 +57,51 @@ export interface Invoice {
   updatedAt: string;
 }
 
+export interface InvoiceClientSummary {
+  id: string;
+  businessName: string;
+  email: string;
+}
+
+export interface InvoiceClient extends InvoiceClientSummary {
+  contactName: string | null;
+  phone: string | null;
+  billingAddress: string;
+  taxId: string | null;
+}
+
+export interface InvoiceListItem extends Omit<Invoice, "items"> {
+  client: InvoiceClientSummary;
+}
+
+export interface InvoiceDetail extends Invoice {
+  client: InvoiceClient;
+}
+
+export interface InvoiceListFilters {
+  limit: number;
+  offset: number;
+  status?: InvoiceStatus;
+  clientId?: string;
+}
+
+export interface InvoicePage {
+  data: InvoiceListItem[];
+  pagination: {
+    limit: number;
+    offset: number;
+    total: number;
+  };
+}
+
 export interface InvoiceRepository {
   create(input: PersistInvoiceInput): Promise<Invoice>;
+  list(filters: InvoiceListFilters): Promise<InvoicePage>;
+  findById(id: string): Promise<InvoiceDetail | null>;
 }
 
 export interface InvoiceService {
   create(input: CreateInvoiceInput): Promise<Invoice>;
+  list(filters: InvoiceListFilters): Promise<InvoicePage>;
+  findById(id: string): Promise<InvoiceDetail | null>;
 }
