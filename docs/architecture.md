@@ -119,6 +119,13 @@ recalculate totals, replace line items, and update the header in one transaction
 Failures roll back the header and all item changes. Deleting a draft relies on
 the invoice-to-items foreign key cascade in the same transaction.
 
+Status actions use the same row-lock boundary. The service resolves the target
+status from the locked current status, validates the transition matrix, and
+checks the due date before `OVERDUE`. The repository then updates only `status`
+and `updated_at`. This keeps the transition rule server-authoritative and makes
+duplicate concurrent actions deterministic: one action succeeds and the next
+observes the new status and returns a conflict.
+
 ## Trust boundaries
 
 - Browser input is untrusted.

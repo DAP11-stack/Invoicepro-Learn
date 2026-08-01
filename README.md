@@ -5,7 +5,7 @@ sales and accounting workflows. It is built as a learning and portfolio project:
 small enough to finish, but complete enough to demonstrate frontend, backend,
 database, testing, and business-rule design.
 
-> Current maturity: **Milestone 1 — Data and API (in progress)**
+> Current maturity: **Milestone 1 — Data and API (complete)**
 
 ## Problem
 
@@ -177,13 +177,14 @@ GET    /invoices/:id
 PATCH  /invoices/:id
 DELETE /invoices/:id
 POST   /invoices/:id/send
+POST   /invoices/:id/mark-overdue
 POST   /invoices/:id/mark-paid
 GET    /invoices/:id/pdf
 ```
 
-Client CRUD plus invoice create, list, detail, draft update, and draft delete
-endpoints are implemented. Status and PDF endpoints remain planned. The current
-request, response, validation, filtering, pagination, and error contract is documented in
+Client CRUD plus invoice create, list, detail, draft update/delete, and status
+workflow endpoints are implemented. The PDF endpoint remains planned. The
+current request, response, validation, filtering, pagination, and error contract is documented in
 [docs/api.md](docs/api.md).
 
 ## Repository structure
@@ -204,14 +205,14 @@ request, response, validation, filtering, pagination, and error contract is docu
 
 - [x] **Milestone 0 — Foundation:** define problem, scope, rules, architecture,
   completion criteria, and repository baseline.
-- [~] **Milestone 1 — Data and API:** workspace, restricted database role,
+- [x] **Milestone 1 — Data and API:** workspace, restricted database role,
   schema migrations, health API, Client CRUD, server-authoritative financial
   calculations, atomic invoice creation and draft updates, filtered invoice
-  lists, invoice detail, and draft deletion exist. Status rules remain.
+  lists, invoice detail, draft deletion, and atomic status workflow exist.
 - [ ] **Milestone 2 — Web workflow:** client and invoice screens connected to
   the API, including loading, empty, success, and error states.
-- [ ] **Milestone 3 — Business workflow:** status rules, overdue handling, PDF,
-  and complete integration tests.
+- [~] **Milestone 3 — Business workflow:** status rules and overdue handling are
+  implemented. PDF generation remains.
 - [ ] **Milestone 4 — Portfolio release:** end-to-end test, screenshots, demo,
   final README evidence, security review, and GitHub publication.
 
@@ -295,7 +296,7 @@ Validated at this stage:
   `003_invoice_number_sequence.sql`.
 - Database privilege audit confirms `invoicepro_app` has CRUD access to business
   tables and no access to `schema_migrations` or future tables by default.
-- Thirty unit/API tests and twelve PostgreSQL integration tests pass.
+- Forty-nine unit/API tests and seventeen PostgreSQL integration tests pass.
 - TypeScript typecheck, production build, and dependency audit pass.
 
 ## Portfolio evidence required before release
@@ -312,7 +313,7 @@ Validated at this stage:
 
 - Client CRUD routes and repository pass PostgreSQL-backed integration tests.
 - Invoice creation, draft update/delete, financial calculations, filtered
-  lists, and detail reads exist. Status workflow, PDF generation, and frontend
+  lists, detail reads, and status workflow exist. PDF generation and frontend
   screens do not exist yet.
 - API and migration commands require their separate local environment files.
 - PostgreSQL CLI is installed but not globally available on `PATH`.

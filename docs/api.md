@@ -156,3 +156,33 @@ Relevant errors:
 - `400 VALIDATION_ERROR`: the route parameter is not a UUID.
 - `404 NOT_FOUND`: no invoice has the requested UUID.
 - `409 INVOICE_NOT_EDITABLE`: the invoice is no longer `DRAFT`.
+
+## Invoice status actions
+
+Status changes use explicit action endpoints. Each request has no body; unknown
+body fields are rejected.
+
+```text
+POST /invoices/:id/send          DRAFT   -> SENT
+POST /invoices/:id/mark-overdue  SENT    -> OVERDUE
+POST /invoices/:id/mark-paid     SENT    -> PAID
+POST /invoices/:id/mark-paid     OVERDUE -> PAID
+```
+
+An invoice may become `OVERDUE` only after its `dueDate`; the due date itself is
+not overdue. `PAID` is terminal and no transition can return an invoice to an
+earlier status. Status changes preserve all financial fields and line items.
+
+Success: HTTP `200` with `{ "data": invoice }` containing the updated status
+and timestamp.
+
+Relevant errors:
+
+- `400 VALIDATION_ERROR`: invalid route parameter or a non-empty action body.
+- `404 NOT_FOUND`: no invoice has the requested UUID.
+- `409 INVALID_STATUS_TRANSITION`: the current status cannot move to the
+  requested status.
+- `409 INVOICE_NOT_OVERDUE`: the due date has not passed.
+
+Status validation and persistence execute while the invoice row is locked in a
+single transaction. Concurrent duplicate actions therefore cannot both succeed.
