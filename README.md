@@ -203,8 +203,8 @@ Milestone 1 endpoint implementation.
 - [x] **Milestone 0 — Foundation:** define problem, scope, rules, architecture,
   completion criteria, and repository baseline.
 - [~] **Milestone 1 — Data and API:** workspace, restricted database role,
-  initial schema, migration runner, and health API exist. Client/invoice APIs,
-  calculations, and API tests remain.
+  schema migrations, health API, and Client CRUD API exist. PostgreSQL-backed
+  Client integration tests, Invoice API, and financial calculations remain.
 - [ ] **Milestone 2 — Web workflow:** client and invoice screens connected to
   the API, including loading, empty, success, and error states.
 - [ ] **Milestone 3 — Business workflow:** status rules, overdue handling, PDF,
@@ -220,14 +220,19 @@ Install workspace dependencies:
 npm.cmd install
 ```
 
-Create local environment file:
+Create separate runtime and migration environment files:
 
 ```powershell
 Copy-Item .env.example .env
+Copy-Item .env.migration.example .env.migration
 ```
 
-Set real local passwords in `.env`; never commit it. Provision role with the
-`postgres` password entered only in hidden prompts:
+Set the restricted application password in `.env` and the PostgreSQL admin
+password only in `.env.migration`; never commit either file. Provision the
+application role with the `postgres` password entered only in hidden prompts:
+
+If upgrading an existing checkout, copy `DATABASE_ADMIN_URL` from `.env` to
+`.env.migration`, then remove it from `.env`.
 
 ```powershell
 & 'E:\Programs\PostgreSQL\18\bin\psql.exe' -U postgres -d invoicepro -f database\scripts\provision-app-role.sql
@@ -242,6 +247,13 @@ npm.cmd run dev:api
 
 Health check: `GET http://localhost:3000/api/v1/health`.
 
+Run fast route tests and PostgreSQL integration tests separately:
+
+```powershell
+npm.cmd test
+npm.cmd run test:integration
+```
+
 Current machine check:
 
 - Node.js: available.
@@ -249,19 +261,19 @@ Current machine check:
 - npm: available through `npm.cmd` because PowerShell script execution blocks
   `npm.ps1`.
 - PostgreSQL 18.4: installed locally on the external SSD.
-- PostgreSQL service: `postgresql-x64-18`, listening on port `5432`.
+- PostgreSQL service: `postgresql-x64-18`; start it before migration or API use.
 - Development database: `invoicepro`.
 - PostgreSQL CLI: available at
   `E:\Programs\PostgreSQL\18\bin\psql.exe`; not yet added to `PATH`.
 
-No real credential belongs in this repository. Future local configuration will
-use an ignored `.env` file and a committed `.env.example` with placeholder
-values.
+No real credential belongs in this repository. Runtime credentials use the
+ignored `.env`; migration-only admin credentials use the ignored
+`.env.migration`. Their committed `.example` files contain placeholders only.
 
 ## Validation status
 
-Milestone 0 validation is complete. Milestone 1 currently provides workspace,
-schema migration, and database-backed health API only.
+Milestone 0 validation is complete. Milestone 1 currently provides the
+workspace, schema migrations, database-backed health API, and Client CRUD API.
 
 Validated at this stage:
 
@@ -271,10 +283,16 @@ Validated at this stage:
 - Financial and status rules have one server-side authority.
 - Scope and non-goals are explicit.
 - Portfolio evidence requirements are defined.
-- PostgreSQL 18.4 service is running locally.
-- The `invoicepro` database accepts a verified pgAdmin connection.
+- PostgreSQL 18.4 installation and service configuration were verified.
+- The `invoicepro` database previously accepted a verified pgAdmin connection.
 - Verification query returned database `invoicepro`, user `postgres`, and one
   PostgreSQL 18.4 server row.
+- Migrations `001_initial_schema.sql` and
+  `002_restrict_app_role_privileges.sql` are applied.
+- Database privilege audit confirms `invoicepro_app` has CRUD access to business
+  tables and no access to `schema_migrations` or future tables by default.
+- Eleven route tests and three PostgreSQL integration tests pass.
+- TypeScript typecheck, production build, and dependency audit pass.
 
 ## Portfolio evidence required before release
 
@@ -288,9 +306,10 @@ Validated at this stage:
 
 ## Current limitations
 
-- Design exists; implementation does not.
-- Client and invoice endpoints do not exist yet.
-- API needs local `.env` values before runtime validation.
+- Client CRUD routes and repository pass PostgreSQL-backed integration tests.
+- Invoice endpoints, financial calculations, status workflow, PDF generation,
+  and frontend screens do not exist yet.
+- API and migration commands require their separate local environment files.
 - PostgreSQL CLI is installed but not globally available on `PATH`.
 - API contracts and UI wireframes are not yet frozen.
 - No deployment is planned for MVP; demo runs locally.

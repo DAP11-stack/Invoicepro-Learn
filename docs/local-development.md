@@ -15,7 +15,7 @@ Admin tool:         pgAdmin 4
 
 This is a machine-specific development setup, not a production design.
 
-## Verified state
+## Previously verified state
 
 The following checks succeeded:
 
@@ -38,14 +38,36 @@ current_user:     postgres
 server_version:   PostgreSQL 18.4
 ```
 
+Service state can change between sessions. Check it before development:
+
+```powershell
+Get-Service postgresql-x64-18
+```
+
+After starting PostgreSQL and applying migrations, validate both test layers:
+
+```powershell
+npm.cmd test
+npm.cmd run test:integration
+```
+
+The integration suite creates uniquely named records and deletes only those
+records during teardown. It does not truncate shared tables.
+
 ## Security boundary
 
 - The installer password is not stored in this repository.
 - Never place a real password in README files, source code, or Git history.
 - The `postgres` account is for local administration only.
 - Milestone 1 must create a restricted `invoicepro_app` login role.
-- Application credentials will live in an ignored `.env` file.
-- `.env.example` will contain placeholders only.
+- Application credentials live in an ignored `.env` file.
+- Migration-only admin credentials live in an ignored `.env.migration` file.
+- The API runtime loader reads only `DATABASE_URL`, `PORT`, and `NODE_ENV`; it
+  does not load `DATABASE_ADMIN_URL` from either local file.
+- The application role has data access only to the three business tables. It
+  cannot modify `schema_migrations`, and new tables require an explicit grant
+  in their migration.
+- `.env.example` and `.env.migration.example` contain placeholders only.
 
 ## Command-line tool
 
