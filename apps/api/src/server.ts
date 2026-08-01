@@ -3,6 +3,7 @@ import { PostgresClientRepository } from "./clients/repository.js";
 import { environment } from "./config/env.js";
 import { checkDatabaseHealth, pool } from "./db/pool.js";
 import { PostgresInvoiceRepository } from "./invoices/repository.js";
+import { PdfKitInvoiceRenderer } from "./invoices/pdf.js";
 import { InvoiceApplicationService } from "./invoices/service.js";
 
 const invoiceRepository = new PostgresInvoiceRepository(pool);
@@ -10,7 +11,13 @@ const invoiceRepository = new PostgresInvoiceRepository(pool);
 const app = createApp({
   healthCheck: checkDatabaseHealth,
   clientService: new PostgresClientRepository(pool),
-  invoiceService: new InvoiceApplicationService(invoiceRepository)
+  invoiceService: new InvoiceApplicationService(invoiceRepository, {
+    pdfRenderer: new PdfKitInvoiceRenderer({
+      name: environment.INVOICE_ISSUER_NAME,
+      email: environment.INVOICE_ISSUER_EMAIL,
+      address: environment.INVOICE_ISSUER_ADDRESS
+    })
+  })
 });
 
 const server = app.listen(environment.PORT, () => {

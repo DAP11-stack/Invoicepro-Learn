@@ -7,7 +7,8 @@ import {
   InvoiceCalculationError,
   InvoiceDomainValidationError,
   InvoiceNotEditableError,
-  InvoiceNotOverdueError
+  InvoiceNotOverdueError,
+  InvoicePdfUnavailableError
 } from "./errors.js";
 import {
   createInvoiceSchema,
@@ -81,6 +82,41 @@ export function createInvoiceHandlers(invoiceService: InvoiceService) {
     send: createStatusTransitionHandler((id) => invoiceService.send(id)),
     markOverdue: createStatusTransitionHandler((id) => invoiceService.markOverdue(id)),
     markPaid: createStatusTransitionHandler((id) => invoiceService.markPaid(id)),
+    pdf: async (request: Request, response: Response, next: NextFunction) => {
+      const id = invoiceIdSchema.safeParse(request.params.id);
+      if (!id.success) {
+        validationError(response, id.error, "Invoice id is invalid.");
+        return;
+      }
+
+      try {
+        const pdf = await invoiceService.generatePdf(id.data);
+        if (pdf == null) {
+          response.status(404).json({
+            error: { code: "NOT_FOUND", message: "Invoice was not found." }
+          });
+          return;
+        }
+
+        response
+          .status(200)
+          .set({
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `inline; filename="${pdf.fileName}"`,
+            "Content-Length": String(pdf.content.length)
+          })
+          .send(pdf.content);
+      } catch (error) {
+        if (error instanceof InvoicePdfUnavailableError) {
+          response.status(409).json({
+            error: { code: "INVOICE_PDF_UNAVAILABLE", message: error.message }
+          });
+          return;
+        }
+
+        next(error);
+      }
+    },
     list: async (request: Request, response: Response, next: NextFunction) => {
       const parsed = invoiceListQuerySchema.safeParse(request.query);
       if (!parsed.success) {

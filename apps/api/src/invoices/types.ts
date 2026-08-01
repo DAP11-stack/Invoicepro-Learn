@@ -110,6 +110,21 @@ export interface InvoiceTransitionContext {
   dueDate: string;
 }
 
+export interface InvoiceIssuer {
+  name: string;
+  email?: string;
+  address?: string;
+}
+
+export interface InvoicePdfResult {
+  fileName: string;
+  content: Buffer;
+}
+
+export interface InvoicePdfRenderer {
+  render(invoice: InvoiceDetail): Promise<Buffer>;
+}
+
 export interface InvoiceRepository {
   create(input: PersistInvoiceInput): Promise<Invoice>;
   updateDraft(
@@ -132,6 +147,7 @@ export interface InvoiceService {
   send(id: string): Promise<Invoice | null>;
   markOverdue(id: string): Promise<Invoice | null>;
   markPaid(id: string): Promise<Invoice | null>;
+  generatePdf(id: string): Promise<InvoicePdfResult | null>;
   list(filters: InvoiceListFilters): Promise<InvoicePage>;
   findById(id: string): Promise<InvoiceDetail | null>;
 }

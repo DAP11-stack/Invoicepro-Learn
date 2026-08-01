@@ -1,5 +1,6 @@
 import { calculateInvoiceTotals } from "./calculations.js";
-import { InvoiceDomainValidationError } from "./errors.js";
+import { InvoiceDomainValidationError, InvoicePdfUnavailableError } from "./errors.js";
+import { PdfKitInvoiceRenderer } from "./pdf.js";
 import { createInvoiceSchema } from "./schemas.js";
 import { assertInvoicePastDue, assertInvoiceStatusTransition } from "./status.js";
 import type {
@@ -8,11 +9,18 @@ import type {
   InvoiceDetail,
   InvoiceListFilters,
   InvoicePage,
+  InvoicePdfRenderer,
+  InvoicePdfResult,
   InvoiceRepository,
   InvoiceService,
   InvoiceTransitionTarget,
   UpdateInvoiceInput
 } from "./types.js";
+
+interface InvoiceServiceOptions {
+  clock?: () => Date;
+  pdfRenderer?: InvoicePdfRenderer;
+}
 
 function toLocalIsoDate(value: Date): string {
   const year = value.getFullYear();
@@ -24,8 +32,15 @@ function toLocalIsoDate(value: Date): string {
 export class InvoiceApplicationService implements InvoiceService {
   constructor(
     private readonly repository: InvoiceRepository,
-    private readonly clock: () => Date = () => new Date()
-  ) {}
+    options: InvoiceServiceOptions = {}
+  ) {
+    this.clock = options.clock ?? (() => new Date());
+    this.pdfRenderer =
+      options.pdfRenderer ?? new PdfKitInvoiceRenderer({ name: "InvoicePro Demo" });
+  }
+
+  private readonly clock: () => Date;
+  private readonly pdfRenderer: InvoicePdfRenderer;
 
   async create(input: CreateInvoiceInput): Promise<Invoice> {
     const totals = calculateInvoiceTotals(input.items, input.taxRate);
@@ -78,6 +93,17 @@ export class InvoiceApplicationService implements InvoiceService {
 
   async markPaid(id: string): Promise<Invoice | null> {
     return this.transition(id, "PAID");
+  }
+
+  async generatePdf(id: string): Promise<InvoicePdfResult | null> {
+    const invoice = await this.repository.findById(id);
+    if (invoice == null) return null;
+    if (invoice.status === "DRAFT") throw new InvoicePdfUnavailableError();
+
+    return {
+      fileName: `${invoice.invoiceNumber.replace(/[^A-Za-z0-9-]/g, "-")}.pdf`,
+      content: await this.pdfRenderer.render(invoice)
+    };
   }
 
   async list(filters: InvoiceListFilters): Promise<InvoicePage> {

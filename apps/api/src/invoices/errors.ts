@@ -44,3 +44,10 @@ export class InvoiceNotOverdueError extends Error {
     this.name = "InvoiceNotOverdueError";
   }
 }
+
+export class InvoicePdfUnavailableError extends Error {
+  constructor() {
+    super("PDF is available only after an invoice has been sent.");
+    this.name = "InvoicePdfUnavailableError";
+  }
+}
