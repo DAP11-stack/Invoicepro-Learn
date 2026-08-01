@@ -181,9 +181,10 @@ POST   /invoices/:id/mark-paid
 GET    /invoices/:id/pdf
 ```
 
-Client CRUD and `POST /invoices` are implemented. Remaining invoice endpoints
-are planned. The current request, response, validation, and error contract is
-documented in [docs/api.md](docs/api.md).
+Client CRUD plus invoice create, list, and detail endpoints are implemented.
+Remaining invoice endpoints are planned. The current request, response,
+validation, filtering, pagination, and error contract is documented in
+[docs/api.md](docs/api.md).
 
 ## Repository structure
 
@@ -205,8 +206,8 @@ documented in [docs/api.md](docs/api.md).
   completion criteria, and repository baseline.
 - [~] **Milestone 1 — Data and API:** workspace, restricted database role,
   schema migrations, health API, Client CRUD, server-authoritative financial
-  calculations, and atomic invoice creation exist. Invoice read/update/list
-  endpoints and status rules remain.
+  calculations, atomic invoice creation, filtered invoice lists, and invoice
+  detail exist. Invoice update/delete endpoints and status rules remain.
 - [ ] **Milestone 2 — Web workflow:** client and invoice screens connected to
   the API, including loading, empty, success, and error states.
 - [ ] **Milestone 3 — Business workflow:** status rules, overdue handling, PDF,
@@ -294,7 +295,7 @@ Validated at this stage:
   `003_invoice_number_sequence.sql`.
 - Database privilege audit confirms `invoicepro_app` has CRUD access to business
   tables and no access to `schema_migrations` or future tables by default.
-- Twenty-one unit/API tests and seven PostgreSQL integration tests pass.
+- Twenty-five unit/API tests and eight PostgreSQL integration tests pass.
 - TypeScript typecheck, production build, and dependency audit pass.
 
 ## Portfolio evidence required before release
@@ -310,8 +311,9 @@ Validated at this stage:
 ## Current limitations
 
 - Client CRUD routes and repository pass PostgreSQL-backed integration tests.
-- Invoice creation and financial calculations exist. Invoice read/update/list,
-  status workflow, PDF generation, and frontend screens do not exist yet.
+- Invoice creation, financial calculations, filtered lists, and detail reads
+  exist. Invoice update/delete, status workflow, PDF generation, and frontend
+  screens do not exist yet.
 - API and migration commands require their separate local environment files.
 - PostgreSQL CLI is installed but not globally available on `PATH`.
 - API contracts and UI wireframes are not yet frozen.

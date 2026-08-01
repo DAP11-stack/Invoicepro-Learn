@@ -81,3 +81,42 @@ INV-YYYYMM-SEQUENCE
 The sequence is PostgreSQL-backed and globally increasing. Rollbacks may leave
 gaps, which is expected; generated numbers remain unique under concurrent
 requests.
+
+## List invoices
+
+`GET /invoices`
+
+Optional query parameters:
+
+- `limit`: integer from 1 to 100; defaults to 20.
+- `offset`: non-negative safe integer; defaults to 0.
+- `status`: `DRAFT`, `SENT`, `OVERDUE`, or `PAID`.
+- `clientId`: client UUID.
+
+Unknown query parameters are rejected. Results are ordered by newest creation
+timestamp and UUID. Each list item includes invoice fields and a client summary,
+but excludes line items. Pagination metadata remains accurate when an offset
+returns an empty page:
+
+```json
+{
+  "data": [],
+  "pagination": {
+    "limit": 20,
+    "offset": 100,
+    "total": 2
+  }
+}
+```
+
+## Get invoice detail
+
+`GET /invoices/:id`
+
+Success: HTTP `200`. The response includes invoice fields, complete client
+billing/contact data, and line items ordered by `position`.
+
+Relevant errors:
+
+- `400 VALIDATION_ERROR`: the route parameter is not a UUID.
+- `404 NOT_FOUND`: no invoice has the requested UUID.

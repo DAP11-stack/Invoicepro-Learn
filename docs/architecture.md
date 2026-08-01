@@ -106,6 +106,11 @@ is added to the subtotal. Tax is calculated from the rounded subtotal and is
 also rounded half-up to two decimal places. PostgreSQL receives only the
 server-calculated decimal strings.
 
+Invoice lists use one bounded page query plus one filtered count query. Invoice
+detail uses one joined invoice/client query plus one ordered item query. Query
+count therefore stays constant as the number of returned invoices or items
+grows; the read API does not perform N+1 lookups.
+
 ## Trust boundaries
 
 - Browser input is untrusted.
