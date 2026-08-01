@@ -69,6 +69,12 @@ const taxRateSchema = decimalInput({
   maximum: "100",
   maximumDecimalPlaces: 2
 });
+const currencySchema = z
+  .string()
+  .trim()
+  .regex(/^[A-Za-z]{3}$/, "Currency must contain exactly three letters.")
+  .transform((value) => value.toUpperCase());
+const notesSchema = z.string().trim().min(1).max(2_000).nullable().optional();
 
 const invoiceItemSchema = z
   .object({
@@ -94,19 +100,42 @@ export const createInvoiceSchema = z
     clientId: z.string().uuid(),
     issueDate: dateSchema,
     dueDate: dateSchema,
-    currency: z
-      .string()
-      .trim()
-      .regex(/^[A-Za-z]{3}$/, "Currency must contain exactly three letters.")
-      .transform((value) => value.toUpperCase())
-      .default("IDR"),
+    currency: currencySchema.default("IDR"),
     taxRate: taxRateSchema.default("0"),
-    notes: z.string().trim().min(1).max(2_000).nullable().optional(),
+    notes: notesSchema,
     items: z.array(invoiceItemSchema).min(1).max(100)
   })
   .strict()
   .superRefine((input, context) => {
     if (input.dueDate < input.issueDate) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["dueDate"],
+        message: "Due date cannot be before issue date."
+      });
+    }
+  });
+
+export const updateInvoiceSchema = z
+  .object({
+    clientId: z.string().uuid().optional(),
+    issueDate: dateSchema.optional(),
+    dueDate: dateSchema.optional(),
+    currency: currencySchema.optional(),
+    taxRate: taxRateSchema.optional(),
+    notes: notesSchema,
+    items: z.array(invoiceItemSchema).min(1).max(100).optional()
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if (Object.keys(input).length === 0) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "At least one invoice field must be provided."
+      });
+    }
+
+    if (input.issueDate && input.dueDate && input.dueDate < input.issueDate) {
       context.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["dueDate"],

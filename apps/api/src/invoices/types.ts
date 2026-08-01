@@ -16,6 +16,16 @@ export interface CreateInvoiceInput {
   items: CreateInvoiceItemInput[];
 }
 
+export interface UpdateInvoiceInput {
+  clientId?: string;
+  issueDate?: string;
+  dueDate?: string;
+  currency?: string;
+  taxRate?: string;
+  notes?: string | null;
+  items?: CreateInvoiceItemInput[];
+}
+
 export interface CalculatedInvoiceItem extends CreateInvoiceItemInput {
   lineTotal: string;
   position: number;
@@ -96,12 +106,19 @@ export interface InvoicePage {
 
 export interface InvoiceRepository {
   create(input: PersistInvoiceInput): Promise<Invoice>;
+  updateDraft(
+    id: string,
+    prepare: (current: Invoice) => PersistInvoiceInput
+  ): Promise<Invoice | null>;
+  deleteDraft(id: string): Promise<boolean>;
   list(filters: InvoiceListFilters): Promise<InvoicePage>;
   findById(id: string): Promise<InvoiceDetail | null>;
 }
 
 export interface InvoiceService {
   create(input: CreateInvoiceInput): Promise<Invoice>;
+  update(id: string, input: UpdateInvoiceInput): Promise<Invoice | null>;
+  delete(id: string): Promise<boolean>;
   list(filters: InvoiceListFilters): Promise<InvoicePage>;
   findById(id: string): Promise<InvoiceDetail | null>;
 }

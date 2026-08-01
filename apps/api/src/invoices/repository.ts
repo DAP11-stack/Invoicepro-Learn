@@ -1,6 +1,6 @@
-import type { Pool } from "pg";
+import type { Pool, PoolClient } from "pg";
 
-import { ClientNotFoundError } from "./errors.js";
+import { ClientNotFoundError, InvoiceNotEditableError } from "./errors.js";
 import type {
   Invoice,
   InvoiceDetail,
@@ -17,8 +17,8 @@ interface InvoiceRow {
   id: string;
   client_id: string;
   invoice_number: string;
-  issue_date: string;
-  due_date: string;
+  issue_date: string | Date;
+  due_date: string | Date;
   status: InvoiceStatus;
   currency: string;
   tax_rate: string;
@@ -62,13 +62,22 @@ function toInvoiceItem(row: InvoiceItemRow): InvoiceItem {
   };
 }
 
+function toIsoDate(value: string | Date): string {
+  if (typeof value === "string") return value;
+
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function toInvoiceBase(row: InvoiceRow): Omit<Invoice, "items"> {
   return {
     id: row.id,
     clientId: row.client_id,
     invoiceNumber: row.invoice_number,
-    issueDate: row.issue_date,
-    dueDate: row.due_date,
+    issueDate: toIsoDate(row.issue_date),
+    dueDate: toIsoDate(row.due_date),
     status: row.status,
     currency: row.currency,
     taxRate: row.tax_rate,
@@ -125,6 +134,35 @@ const selectedInvoiceColumns = `
   i.created_at, i.updated_at
 `;
 
+async function insertInvoiceItems(
+  connection: PoolClient,
+  invoiceId: string,
+  items: PersistInvoiceInput["items"]
+): Promise<InvoiceItemRow[]> {
+  const values: Array<string | number> = [];
+  const placeholders = items.map((item, index) => {
+    const offset = index * 6;
+    values.push(
+      invoiceId,
+      item.description,
+      item.quantity,
+      item.unitPrice,
+      item.lineTotal,
+      item.position
+    );
+    return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`;
+  });
+
+  const result = await connection.query<InvoiceItemRow>(
+    `INSERT INTO invoice_items (
+      invoice_id, description, quantity, unit_price, line_total, position
+    ) VALUES ${placeholders.join(", ")}
+    RETURNING id, description, quantity, unit_price, line_total, position`,
+    values
+  );
+  return result.rows;
+}
+
 export class PostgresInvoiceRepository implements InvoiceRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -165,29 +203,116 @@ export class PostgresInvoiceRepository implements InvoiceRepository {
       );
       const invoice = invoiceResult.rows[0]!;
 
-      const values: Array<string | number> = [];
-      const placeholders = input.items.map((item, index) => {
-        const offset = index * 6;
-        values.push(
-          invoice.id,
-          item.description,
-          item.quantity,
-          item.unitPrice,
-          item.lineTotal,
-          item.position
-        );
-        return `($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`;
-      });
-      const itemResult = await connection.query<InvoiceItemRow>(
-        `INSERT INTO invoice_items (
-          invoice_id, description, quantity, unit_price, line_total, position
-        ) VALUES ${placeholders.join(", ")}
-        RETURNING id, description, quantity, unit_price, line_total, position`,
-        values
-      );
+      const items = await insertInvoiceItems(connection, invoice.id, input.items);
 
       await connection.query("COMMIT");
-      return toInvoice(invoice, itemResult.rows);
+      return toInvoice(invoice, items);
+    } catch (error) {
+      await connection.query("ROLLBACK");
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async updateDraft(
+    id: string,
+    prepare: (current: Invoice) => PersistInvoiceInput
+  ): Promise<Invoice | null> {
+    const connection = await this.pool.connect();
+
+    try {
+      await connection.query("BEGIN");
+      const invoiceResult = await connection.query<InvoiceRow>(
+        `SELECT ${invoiceColumns}
+         FROM invoices
+         WHERE id = $1
+         FOR UPDATE`,
+        [id]
+      );
+      const invoice = invoiceResult.rows[0];
+      if (invoice == null) {
+        await connection.query("COMMIT");
+        return null;
+      }
+
+      if (invoice.status !== "DRAFT") throw new InvoiceNotEditableError();
+
+      const currentItems = await connection.query<InvoiceItemRow>(
+        `SELECT id, description, quantity, unit_price, line_total, position
+         FROM invoice_items
+         WHERE invoice_id = $1
+         ORDER BY position`,
+        [id]
+      );
+      const input = prepare(toInvoice(invoice, currentItems.rows));
+
+      const client = await connection.query("SELECT 1 FROM clients WHERE id = $1", [input.clientId]);
+      if (client.rowCount !== 1) throw new ClientNotFoundError();
+
+      const updatedResult = await connection.query<InvoiceRow>(
+        `UPDATE invoices
+         SET client_id = $2,
+             issue_date = $3,
+             due_date = $4,
+             currency = $5,
+             tax_rate = $6,
+             subtotal = $7,
+             tax_total = $8,
+             grand_total = $9,
+             notes = $10,
+             updated_at = clock_timestamp()
+         WHERE id = $1
+         RETURNING ${invoiceColumns}`,
+        [
+          id,
+          input.clientId,
+          input.issueDate,
+          input.dueDate,
+          input.currency,
+          input.taxRate,
+          input.subtotal,
+          input.taxTotal,
+          input.grandTotal,
+          input.notes ?? null
+        ]
+      );
+
+      await connection.query("DELETE FROM invoice_items WHERE invoice_id = $1", [id]);
+      const items = await insertInvoiceItems(connection, id, input.items);
+      await connection.query("COMMIT");
+      return toInvoice(updatedResult.rows[0]!, items);
+    } catch (error) {
+      await connection.query("ROLLBACK");
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async deleteDraft(id: string): Promise<boolean> {
+    const connection = await this.pool.connect();
+
+    try {
+      await connection.query("BEGIN");
+      const result = await connection.query<{ status: InvoiceStatus }>(
+        `SELECT status
+         FROM invoices
+         WHERE id = $1
+         FOR UPDATE`,
+        [id]
+      );
+      const invoice = result.rows[0];
+      if (invoice == null) {
+        await connection.query("COMMIT");
+        return false;
+      }
+
+      if (invoice.status !== "DRAFT") throw new InvoiceNotEditableError();
+
+      await connection.query("DELETE FROM invoices WHERE id = $1", [id]);
+      await connection.query("COMMIT");
+      return true;
     } catch (error) {
       await connection.query("ROLLBACK");
       throw error;
