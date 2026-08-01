@@ -350,4 +350,110 @@ describe("Invoice API with PostgreSQL", () => {
     expect(persisted.body.data.status).toBe("SENT");
     expect(persisted.body.data.notes).toBeNull();
   });
+
+  it("persists the full draft to sent to overdue to paid workflow", async () => {
+    const clientId = await createTestClient(randomUUID());
+    const created = await request(app).post("/api/v1/invoices").send({
+      clientId,
+      issueDate: "2026-01-01",
+      dueDate: "2026-01-31",
+      items: [{ description: "Past due", quantity: "1", unitPrice: "100" }]
+    });
+    const invoiceId = created.body.data.id as string;
+    invoiceIds.add(invoiceId);
+
+    const sent = await request(app).post(`/api/v1/invoices/${invoiceId}/send`);
+    const overdue = await request(app).post(`/api/v1/invoices/${invoiceId}/mark-overdue`);
+    const paid = await request(app).post(`/api/v1/invoices/${invoiceId}/mark-paid`);
+    const persisted = await request(app).get(`/api/v1/invoices/${invoiceId}`);
+
+    expect(sent.status).toBe(200);
+    expect(sent.body.data.status).toBe("SENT");
+    expect(overdue.status).toBe(200);
+    expect(overdue.body.data.status).toBe("OVERDUE");
+    expect(paid.status).toBe(200);
+    expect(paid.body.data.status).toBe("PAID");
+    expect(persisted.body.data.status).toBe("PAID");
+  });
+
+  it("allows a sent invoice to be paid without passing through overdue", async () => {
+    const clientId = await createTestClient(randomUUID());
+    const created = await request(app).post("/api/v1/invoices").send({
+      clientId,
+      issueDate: "2026-08-01",
+      dueDate: "2099-08-31",
+      items: [{ description: "Paid on time", quantity: "1", unitPrice: "100" }]
+    });
+    const invoiceId = created.body.data.id as string;
+    invoiceIds.add(invoiceId);
+
+    await request(app).post(`/api/v1/invoices/${invoiceId}/send`);
+    const paid = await request(app).post(`/api/v1/invoices/${invoiceId}/mark-paid`);
+
+    expect(paid.status).toBe(200);
+    expect(paid.body.data.status).toBe("PAID");
+  });
+
+  it("rejects invalid draft transitions without changing persisted status", async () => {
+    const clientId = await createTestClient(randomUUID());
+    const created = await request(app).post("/api/v1/invoices").send({
+      clientId,
+      issueDate: "2026-01-01",
+      dueDate: "2026-01-31",
+      items: [{ description: "Still draft", quantity: "1", unitPrice: "100" }]
+    });
+    const invoiceId = created.body.data.id as string;
+    invoiceIds.add(invoiceId);
+
+    const paid = await request(app).post(`/api/v1/invoices/${invoiceId}/mark-paid`);
+    const overdue = await request(app).post(`/api/v1/invoices/${invoiceId}/mark-overdue`);
+    const persisted = await request(app).get(`/api/v1/invoices/${invoiceId}`);
+
+    expect(paid.status).toBe(409);
+    expect(paid.body.error.code).toBe("INVALID_STATUS_TRANSITION");
+    expect(overdue.status).toBe(409);
+    expect(overdue.body.error.code).toBe("INVALID_STATUS_TRANSITION");
+    expect(persisted.body.data.status).toBe("DRAFT");
+  });
+
+  it("keeps a sent invoice out of overdue status until its due date has passed", async () => {
+    const clientId = await createTestClient(randomUUID());
+    const created = await request(app).post("/api/v1/invoices").send({
+      clientId,
+      issueDate: "2026-08-01",
+      dueDate: "2099-08-31",
+      items: [{ description: "Not due", quantity: "1", unitPrice: "100" }]
+    });
+    const invoiceId = created.body.data.id as string;
+    invoiceIds.add(invoiceId);
+
+    await request(app).post(`/api/v1/invoices/${invoiceId}/send`);
+    const overdue = await request(app).post(`/api/v1/invoices/${invoiceId}/mark-overdue`);
+    const persisted = await request(app).get(`/api/v1/invoices/${invoiceId}`);
+
+    expect(overdue.status).toBe(409);
+    expect(overdue.body.error.code).toBe("INVOICE_NOT_OVERDUE");
+    expect(persisted.body.data.status).toBe("SENT");
+  });
+
+  it("serializes concurrent duplicate send actions", async () => {
+    const clientId = await createTestClient(randomUUID());
+    const created = await request(app).post("/api/v1/invoices").send({
+      clientId,
+      issueDate: "2026-08-01",
+      dueDate: "2026-08-31",
+      items: [{ description: "Send once", quantity: "1", unitPrice: "100" }]
+    });
+    const invoiceId = created.body.data.id as string;
+    invoiceIds.add(invoiceId);
+
+    const responses = await Promise.all([
+      request(app).post(`/api/v1/invoices/${invoiceId}/send`),
+      request(app).post(`/api/v1/invoices/${invoiceId}/send`)
+    ]);
+    const persisted = await request(app).get(`/api/v1/invoices/${invoiceId}`);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+    expect(persisted.body.data.status).toBe("SENT");
+  });
 });

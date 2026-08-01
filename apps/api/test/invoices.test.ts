@@ -3,7 +3,12 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../src/app.js";
 import type { ClientService } from "../src/clients/types.js";
-import { ClientNotFoundError, InvoiceNotEditableError } from "../src/invoices/errors.js";
+import {
+  ClientNotFoundError,
+  InvalidInvoiceStatusTransitionError,
+  InvoiceNotEditableError,
+  InvoiceNotOverdueError
+} from "../src/invoices/errors.js";
 import type { Invoice, InvoiceDetail, InvoiceListItem, InvoiceService } from "../src/invoices/types.js";
 
 const clientId = "8ee050d9-c8f5-48c8-8508-fc4ebd4237d5";
@@ -60,6 +65,9 @@ function makeInvoiceService(overrides: Partial<InvoiceService> = {}): InvoiceSer
     create: vi.fn(async () => invoice),
     update: vi.fn(async () => invoice),
     delete: vi.fn(async () => true),
+    send: vi.fn(async () => ({ ...invoice, status: "SENT" as const })),
+    markOverdue: vi.fn(async () => ({ ...invoice, status: "OVERDUE" as const })),
+    markPaid: vi.fn(async () => ({ ...invoice, status: "PAID" as const })),
     list: vi.fn(async (filters) => ({
       data: [invoiceListItem],
       pagination: { limit: filters.limit, offset: filters.offset, total: 1 }
@@ -302,5 +310,65 @@ describe("invoice API", () => {
     expect(missing.status).toBe(404);
     expect(locked.status).toBe(409);
     expect(locked.body.error.code).toBe("INVOICE_NOT_EDITABLE");
+  });
+
+  it.each([
+    ["send", "send", "SENT"],
+    ["mark-overdue", "markOverdue", "OVERDUE"],
+    ["mark-paid", "markPaid", "PAID"]
+  ] as const)("executes the %s invoice action", async (path, method, status) => {
+    const invoiceService = makeInvoiceService();
+    const response = await request(makeApp(invoiceService)).post(
+      `/api/v1/invoices/${invoice.id}/${path}`
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.body.data.status).toBe(status);
+    expect(invoiceService[method]).toHaveBeenCalledWith(invoice.id);
+  });
+
+  it("rejects invalid ids and non-empty action bodies", async () => {
+    const invoiceService = makeInvoiceService();
+    const invalidId = await request(makeApp(invoiceService)).post(
+      "/api/v1/invoices/not-a-uuid/send"
+    );
+    const unexpectedBody = await request(makeApp(invoiceService))
+      .post(`/api/v1/invoices/${invoice.id}/send`)
+      .send({ status: "SENT" });
+
+    expect(invalidId.status).toBe(400);
+    expect(unexpectedBody.status).toBe(400);
+    expect(invoiceService.send).not.toHaveBeenCalled();
+  });
+
+  it("maps missing invoices and invalid transitions", async () => {
+    const missing = await request(makeApp(makeInvoiceService({ send: async () => null }))).post(
+      `/api/v1/invoices/${invoice.id}/send`
+    );
+    const invalid = await request(
+      makeApp(
+        makeInvoiceService({
+          markPaid: async () =>
+            Promise.reject(new InvalidInvoiceStatusTransitionError("DRAFT", "PAID"))
+        })
+      )
+    ).post(`/api/v1/invoices/${invoice.id}/mark-paid`);
+
+    expect(missing.status).toBe(404);
+    expect(invalid.status).toBe(409);
+    expect(invalid.body.error.code).toBe("INVALID_STATUS_TRANSITION");
+  });
+
+  it("maps an early overdue action to a dedicated conflict", async () => {
+    const response = await request(
+      makeApp(
+        makeInvoiceService({
+          markOverdue: async () => Promise.reject(new InvoiceNotOverdueError())
+        })
+      )
+    ).post(`/api/v1/invoices/${invoice.id}/mark-overdue`);
+
+    expect(response.status).toBe(409);
+    expect(response.body.error.code).toBe("INVOICE_NOT_OVERDUE");
   });
 });

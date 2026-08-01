@@ -18,6 +18,9 @@ const unusedInvoiceService = {
   },
   update: async () => null,
   delete: async () => false,
+  send: async () => null,
+  markOverdue: async () => null,
+  markPaid: async () => null,
   list: async () => ({ data: [], pagination: { limit: 20, offset: 0, total: 0 } }),
   findById: async () => null
 };
