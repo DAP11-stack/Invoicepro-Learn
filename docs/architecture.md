@@ -96,6 +96,16 @@ Return stored invoice
 
 Any failure rolls back the full write.
 
+Invoice numbers use a PostgreSQL sequence and the format
+`INV-YYYYMM-SEQUENCE`. Sequence gaps after rolled-back transactions are
+accepted because uniqueness and concurrency safety matter more than gapless
+numbering for this MVP.
+
+Each line total is rounded to two decimal places with `ROUND_HALF_UP` before it
+is added to the subtotal. Tax is calculated from the rounded subtotal and is
+also rounded half-up to two decimal places. PostgreSQL receives only the
+server-calculated decimal strings.
+
 ## Trust boundaries
 
 - Browser input is untrusted.

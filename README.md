@@ -158,7 +158,7 @@ Local database setup: [docs/local-development.md](docs/local-development.md)
 Each invoice belongs to one client. Each invoice has one or more items.
 Invoice creation and item creation use one database transaction.
 
-## Planned API
+## API
 
 Base path: `/api/v1`
 
@@ -181,8 +181,9 @@ POST   /invoices/:id/mark-paid
 GET    /invoices/:id/pdf
 ```
 
-Exact request, response, pagination, and error schemas will be frozen before
-Milestone 1 endpoint implementation.
+Client CRUD and `POST /invoices` are implemented. Remaining invoice endpoints
+are planned. The current request, response, validation, and error contract is
+documented in [docs/api.md](docs/api.md).
 
 ## Repository structure
 
@@ -203,8 +204,9 @@ Milestone 1 endpoint implementation.
 - [x] **Milestone 0 — Foundation:** define problem, scope, rules, architecture,
   completion criteria, and repository baseline.
 - [~] **Milestone 1 — Data and API:** workspace, restricted database role,
-  schema migrations, health API, and Client CRUD API exist. PostgreSQL-backed
-  Client integration tests, Invoice API, and financial calculations remain.
+  schema migrations, health API, Client CRUD, server-authoritative financial
+  calculations, and atomic invoice creation exist. Invoice read/update/list
+  endpoints and status rules remain.
 - [ ] **Milestone 2 — Web workflow:** client and invoice screens connected to
   the API, including loading, empty, success, and error states.
 - [ ] **Milestone 3 — Business workflow:** status rules, overdue handling, PDF,
@@ -288,10 +290,11 @@ Validated at this stage:
 - Verification query returned database `invoicepro`, user `postgres`, and one
   PostgreSQL 18.4 server row.
 - Migrations `001_initial_schema.sql` and
-  `002_restrict_app_role_privileges.sql` are applied.
+  `002_restrict_app_role_privileges.sql` are applied, along with
+  `003_invoice_number_sequence.sql`.
 - Database privilege audit confirms `invoicepro_app` has CRUD access to business
   tables and no access to `schema_migrations` or future tables by default.
-- Eleven route tests and three PostgreSQL integration tests pass.
+- Twenty-one unit/API tests and seven PostgreSQL integration tests pass.
 - TypeScript typecheck, production build, and dependency audit pass.
 
 ## Portfolio evidence required before release
@@ -307,8 +310,8 @@ Validated at this stage:
 ## Current limitations
 
 - Client CRUD routes and repository pass PostgreSQL-backed integration tests.
-- Invoice endpoints, financial calculations, status workflow, PDF generation,
-  and frontend screens do not exist yet.
+- Invoice creation and financial calculations exist. Invoice read/update/list,
+  status workflow, PDF generation, and frontend screens do not exist yet.
 - API and migration commands require their separate local environment files.
 - PostgreSQL CLI is installed but not globally available on `PATH`.
 - API contracts and UI wireframes are not yet frozen.
