@@ -7,7 +7,8 @@ import {
   ClientNotFoundError,
   InvalidInvoiceStatusTransitionError,
   InvoiceNotEditableError,
-  InvoiceNotOverdueError
+  InvoiceNotOverdueError,
+  InvoicePdfUnavailableError
 } from "../src/invoices/errors.js";
 import type { Invoice, InvoiceDetail, InvoiceListItem, InvoiceService } from "../src/invoices/types.js";
 
@@ -68,6 +69,10 @@ function makeInvoiceService(overrides: Partial<InvoiceService> = {}): InvoiceSer
     send: vi.fn(async () => ({ ...invoice, status: "SENT" as const })),
     markOverdue: vi.fn(async () => ({ ...invoice, status: "OVERDUE" as const })),
     markPaid: vi.fn(async () => ({ ...invoice, status: "PAID" as const })),
+    generatePdf: vi.fn(async () => ({
+      fileName: `${invoice.invoiceNumber}.pdf`,
+      content: Buffer.from("%PDF-1.7\nmock invoice")
+    })),
     list: vi.fn(async (filters) => ({
       data: [invoiceListItem],
       pagination: { limit: filters.limit, offset: filters.offset, total: 1 }
@@ -370,5 +375,38 @@ describe("invoice API", () => {
 
     expect(response.status).toBe(409);
     expect(response.body.error.code).toBe("INVOICE_NOT_OVERDUE");
+  });
+
+  it("returns a generated invoice PDF with safe response headers", async () => {
+    const invoiceService = makeInvoiceService();
+    const response = await request(makeApp(invoiceService)).get(
+      `/api/v1/invoices/${invoice.id}/pdf`
+    );
+
+    expect(response.status).toBe(200);
+    expect(response.headers["content-type"]).toBe("application/pdf");
+    expect(response.headers["content-disposition"]).toBe(
+      `inline; filename="${invoice.invoiceNumber}.pdf"`
+    );
+    expect(Buffer.isBuffer(response.body)).toBe(true);
+    expect(response.body.subarray(0, 4).toString()).toBe("%PDF");
+    expect(invoiceService.generatePdf).toHaveBeenCalledWith(invoice.id);
+  });
+
+  it("maps missing and draft invoice PDF requests", async () => {
+    const missing = await request(
+      makeApp(makeInvoiceService({ generatePdf: async () => null }))
+    ).get(`/api/v1/invoices/${invoice.id}/pdf`);
+    const draft = await request(
+      makeApp(
+        makeInvoiceService({
+          generatePdf: async () => Promise.reject(new InvoicePdfUnavailableError())
+        })
+      )
+    ).get(`/api/v1/invoices/${invoice.id}/pdf`);
+
+    expect(missing.status).toBe(404);
+    expect(draft.status).toBe(409);
+    expect(draft.body.error.code).toBe("INVOICE_PDF_UNAVAILABLE");
   });
 });

@@ -456,4 +456,36 @@ describe("Invoice API with PostgreSQL", () => {
     expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
     expect(persisted.body.data.status).toBe("SENT");
   });
+
+  it("generates a PDF only after the invoice has been sent", async () => {
+    const clientId = await createTestClient(randomUUID());
+    const created = await request(app).post("/api/v1/invoices").send({
+      clientId,
+      issueDate: "2026-08-01",
+      dueDate: "2026-08-31",
+      taxRate: "11",
+      notes: "PDF integration verification",
+      items: [
+        { description: "Design service", quantity: "2", unitPrice: "125000" },
+        { description: "Print preparation", quantity: "1", unitPrice: "50000" }
+      ]
+    });
+    const invoiceId = created.body.data.id as string;
+    invoiceIds.add(invoiceId);
+
+    const draftPdf = await request(app).get(`/api/v1/invoices/${invoiceId}/pdf`);
+    await request(app).post(`/api/v1/invoices/${invoiceId}/send`);
+    const issuedPdf = await request(app).get(`/api/v1/invoices/${invoiceId}/pdf`);
+
+    expect(draftPdf.status).toBe(409);
+    expect(draftPdf.body.error.code).toBe("INVOICE_PDF_UNAVAILABLE");
+    expect(issuedPdf.status).toBe(200);
+    expect(issuedPdf.headers["content-type"]).toBe("application/pdf");
+    expect(issuedPdf.headers["content-disposition"]).toMatch(
+      /^inline; filename="INV-202608-\d{6,}\.pdf"$/
+    );
+    expect(Buffer.isBuffer(issuedPdf.body)).toBe(true);
+    expect(issuedPdf.body.subarray(0, 4).toString()).toBe("%PDF");
+    expect(issuedPdf.body.length).toBeGreaterThan(1_000);
+  });
 });
