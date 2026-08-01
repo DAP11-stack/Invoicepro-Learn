@@ -225,4 +225,129 @@ describe("Invoice API with PostgreSQL", () => {
     expect(response.body.error.code).toBe("NOT_FOUND");
     expect(after.rows[0]?.total).toBe(before.rows[0]?.total);
   });
+
+  it("updates a draft invoice and recalculates its persisted items and totals", async () => {
+    const clientId = await createTestClient(randomUUID());
+    const created = await request(app).post("/api/v1/invoices").send({
+      clientId,
+      issueDate: "2026-08-01",
+      dueDate: "2026-08-31",
+      taxRate: "0",
+      items: [{ description: "Original", quantity: "1", unitPrice: "100" }]
+    });
+    const invoiceId = created.body.data.id as string;
+    invoiceIds.add(invoiceId);
+
+    const updated = await request(app).patch(`/api/v1/invoices/${invoiceId}`).send({
+      dueDate: "2026-09-15",
+      currency: "usd",
+      taxRate: "10",
+      notes: "Updated draft",
+      items: [
+        { description: "Updated A", quantity: "2", unitPrice: "25" },
+        { description: "Updated B", quantity: "3", unitPrice: "10" }
+      ]
+    });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body.data).toEqual(
+      expect.objectContaining({
+        id: invoiceId,
+        invoiceNumber: created.body.data.invoiceNumber,
+        status: "DRAFT",
+        dueDate: "2026-09-15",
+        currency: "USD",
+        subtotal: "80.00",
+        taxTotal: "8.00",
+        grandTotal: "88.00",
+        notes: "Updated draft"
+      })
+    );
+    expect(updated.body.data.items).toEqual([
+      expect.objectContaining({ position: 1, lineTotal: "50.00" }),
+      expect.objectContaining({ position: 2, lineTotal: "30.00" })
+    ]);
+
+    const persisted = await request(app).get(`/api/v1/invoices/${invoiceId}`);
+    const { client: _client, ...persistedInvoice } = persisted.body.data;
+    expect(persistedInvoice).toEqual(updated.body.data);
+  });
+
+  it("rolls back a draft update when merged dates or the target client are invalid", async () => {
+    const clientId = await createTestClient(randomUUID());
+    const created = await request(app).post("/api/v1/invoices").send({
+      clientId,
+      issueDate: "2026-08-10",
+      dueDate: "2026-08-31",
+      items: [{ description: "Unchanged", quantity: "1", unitPrice: "100" }]
+    });
+    const invoiceId = created.body.data.id as string;
+    invoiceIds.add(invoiceId);
+
+    const invalidDate = await request(app)
+      .patch(`/api/v1/invoices/${invoiceId}`)
+      .send({ dueDate: "2026-08-01" });
+    const unknownClient = await request(app)
+      .patch(`/api/v1/invoices/${invoiceId}`)
+      .send({ clientId: randomUUID() });
+    const persisted = await request(app).get(`/api/v1/invoices/${invoiceId}`);
+
+    expect(invalidDate.status).toBe(400);
+    expect(invalidDate.body.error.details).toEqual(
+      expect.arrayContaining([expect.objectContaining({ path: "dueDate" })])
+    );
+    expect(unknownClient.status).toBe(404);
+    const { client: _client, ...persistedInvoice } = persisted.body.data;
+    expect(persistedInvoice).toEqual(created.body.data);
+  });
+
+  it("deletes a draft invoice and cascades its line items", async () => {
+    const clientId = await createTestClient(randomUUID());
+    const created = await request(app).post("/api/v1/invoices").send({
+      clientId,
+      issueDate: "2026-08-01",
+      dueDate: "2026-08-31",
+      items: [{ description: "Delete me", quantity: "1", unitPrice: "100" }]
+    });
+    const invoiceId = created.body.data.id as string;
+    invoiceIds.add(invoiceId);
+
+    const deleted = await request(app).delete(`/api/v1/invoices/${invoiceId}`);
+    invoiceIds.delete(invoiceId);
+    const missing = await request(app).get(`/api/v1/invoices/${invoiceId}`);
+    const itemCount = await pool.query<{ total: number }>(
+      "SELECT count(*)::int AS total FROM invoice_items WHERE invoice_id = $1",
+      [invoiceId]
+    );
+
+    expect(deleted.status).toBe(204);
+    expect(missing.status).toBe(404);
+    expect(itemCount.rows[0]?.total).toBe(0);
+  });
+
+  it("rejects updates and deletes after an invoice leaves draft status", async () => {
+    const clientId = await createTestClient(randomUUID());
+    const created = await request(app).post("/api/v1/invoices").send({
+      clientId,
+      issueDate: "2026-08-01",
+      dueDate: "2026-08-31",
+      items: [{ description: "Locked", quantity: "1", unitPrice: "100" }]
+    });
+    const invoiceId = created.body.data.id as string;
+    invoiceIds.add(invoiceId);
+    await pool.query("UPDATE invoices SET status = 'SENT' WHERE id = $1", [invoiceId]);
+
+    const update = await request(app)
+      .patch(`/api/v1/invoices/${invoiceId}`)
+      .send({ notes: "Must not change" });
+    const deletion = await request(app).delete(`/api/v1/invoices/${invoiceId}`);
+    const persisted = await request(app).get(`/api/v1/invoices/${invoiceId}`);
+
+    expect(update.status).toBe(409);
+    expect(update.body.error.code).toBe("INVOICE_NOT_EDITABLE");
+    expect(deletion.status).toBe(409);
+    expect(deletion.body.error.code).toBe("INVOICE_NOT_EDITABLE");
+    expect(persisted.body.data.status).toBe("SENT");
+    expect(persisted.body.data.notes).toBeNull();
+  });
 });

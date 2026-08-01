@@ -12,6 +12,8 @@ const unusedInvoiceService = {
   create: async () => {
     throw new Error("not used");
   },
+  update: async () => null,
+  delete: async () => false,
   list: async () => ({ data: [], pagination: { limit: 20, offset: 0, total: 0 } }),
   findById: async () => null
 };

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { createApp } from "../src/app.js";
 import type { ClientService } from "../src/clients/types.js";
-import { ClientNotFoundError } from "../src/invoices/errors.js";
+import { ClientNotFoundError, InvoiceNotEditableError } from "../src/invoices/errors.js";
 import type { Invoice, InvoiceDetail, InvoiceListItem, InvoiceService } from "../src/invoices/types.js";
 
 const clientId = "8ee050d9-c8f5-48c8-8508-fc4ebd4237d5";
@@ -58,6 +58,8 @@ const unusedClientService: ClientService = {
 function makeInvoiceService(overrides: Partial<InvoiceService> = {}): InvoiceService {
   return {
     create: vi.fn(async () => invoice),
+    update: vi.fn(async () => invoice),
+    delete: vi.fn(async () => true),
     list: vi.fn(async (filters) => ({
       data: [invoiceListItem],
       pagination: { limit: filters.limit, offset: filters.offset, total: 1 }
@@ -219,5 +221,86 @@ describe("invoice API", () => {
 
     expect(response.status).toBe(404);
     expect(response.body.error).toEqual({ code: "NOT_FOUND", message: "Client was not found." });
+  });
+
+  it("normalizes an invoice patch and rejects client-supplied totals", async () => {
+    const invoiceService = makeInvoiceService();
+    const updated = await request(makeApp(invoiceService))
+      .patch(`/api/v1/invoices/${invoice.id}`)
+      .send({ currency: "usd", taxRate: 5, notes: null });
+    const forbidden = await request(makeApp(invoiceService))
+      .patch(`/api/v1/invoices/${invoice.id}`)
+      .send({ subtotal: "1.00" });
+
+    expect(updated.status).toBe(200);
+    expect(invoiceService.update).toHaveBeenCalledWith(invoice.id, {
+      currency: "USD",
+      taxRate: "5",
+      notes: null
+    });
+    expect(forbidden.status).toBe(400);
+    expect(forbidden.body.error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects an empty invoice patch", async () => {
+    const invoiceService = makeInvoiceService();
+    const response = await request(makeApp(invoiceService))
+      .patch(`/api/v1/invoices/${invoice.id}`)
+      .send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body.error.details).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ message: "At least one invoice field must be provided." })
+      ])
+    );
+    expect(invoiceService.update).not.toHaveBeenCalled();
+  });
+
+  it("maps missing and non-editable invoice updates to 404 and 409", async () => {
+    const missing = await request(makeApp(makeInvoiceService({ update: async () => null })))
+      .patch(`/api/v1/invoices/${invoice.id}`)
+      .send({ notes: "Updated" });
+    const locked = await request(
+      makeApp(
+        makeInvoiceService({
+          update: async () => Promise.reject(new InvoiceNotEditableError())
+        })
+      )
+    )
+      .patch(`/api/v1/invoices/${invoice.id}`)
+      .send({ notes: "Updated" });
+
+    expect(missing.status).toBe(404);
+    expect(locked.status).toBe(409);
+    expect(locked.body.error.code).toBe("INVOICE_NOT_EDITABLE");
+  });
+
+  it("deletes a draft invoice with an empty 204 response", async () => {
+    const invoiceService = makeInvoiceService();
+    const response = await request(makeApp(invoiceService)).delete(
+      `/api/v1/invoices/${invoice.id}`
+    );
+
+    expect(response.status).toBe(204);
+    expect(response.text).toBe("");
+    expect(invoiceService.delete).toHaveBeenCalledWith(invoice.id);
+  });
+
+  it("maps missing and non-editable invoice deletes to 404 and 409", async () => {
+    const missing = await request(makeApp(makeInvoiceService({ delete: async () => false }))).delete(
+      `/api/v1/invoices/${invoice.id}`
+    );
+    const locked = await request(
+      makeApp(
+        makeInvoiceService({
+          delete: async () => Promise.reject(new InvoiceNotEditableError())
+        })
+      )
+    ).delete(`/api/v1/invoices/${invoice.id}`);
+
+    expect(missing.status).toBe(404);
+    expect(locked.status).toBe(409);
+    expect(locked.body.error.code).toBe("INVOICE_NOT_EDITABLE");
   });
 });
