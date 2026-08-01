@@ -172,7 +172,8 @@ Expected categories:
 - Unit tests: money calculations and status-transition rules.
 - Integration tests: routes, database constraints, transactions, and errors.
 - Browser QA: full client-to-PDF journey and responsive desktop/mobile checks.
-- Planned end-to-end automation: persistent client-to-PDF browser journey.
+- Playwright E2E: persisted client-to-PDF lifecycle, download bytes, responsive
+  layout, and identifier-scoped database cleanup.
 
 ## Deferred decisions
 

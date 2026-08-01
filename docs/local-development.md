@@ -59,11 +59,11 @@ records during teardown. It does not truncate shared tables.
 - The installer password is not stored in this repository.
 - Never place a real password in README files, source code, or Git history.
 - The `postgres` account is for local administration only.
-- Milestone 1 must create a restricted `invoicepro_app` login role.
+- The application connects through the restricted `invoicepro_app` login role.
 - Application credentials live in an ignored `.env` file.
 - Migration-only admin credentials live in an ignored `.env.migration` file.
-- The API runtime loader reads only `DATABASE_URL`, `PORT`, and `NODE_ENV`; it
-  does not load `DATABASE_ADMIN_URL` from either local file.
+- The API runtime loader reads the runtime database, port, environment, and
+  public invoice-issuer settings; it never loads `DATABASE_ADMIN_URL`.
 - The application role has data access only to the three business tables. It
   cannot modify `schema_migrations`, and new tables require an explicit grant
   in their migration.

@@ -6,8 +6,9 @@ server-authoritative financial calculations, transactional PostgreSQL writes,
 explicit invoice lifecycle rules, and downloadable PDF invoices.
 
 > **Project status:** Functional full-stack prototype. Client and invoice
-> workflows are usable through a browser; authentication, multi-tenancy,
-> end-to-end automation, and deployment remain in development.
+> workflows are usable through a browser and covered by automated end-to-end
+> testing. Hosted deployment and production SaaS controls are future extensions,
+> not requirements of the current local-first version.
 
 ## Why this project exists
 
@@ -75,6 +76,20 @@ duplicate actions cannot both succeed.
 - Repeat table headers and paginate long invoices without overlapping totals or
   footers.
 
+## Browser demo
+
+![InvoicePro desktop invoice workspace](docs/screenshots/invoice-workspace-desktop.png)
+
+<details>
+<summary>Mobile invoice detail</summary>
+
+![InvoicePro mobile invoice detail](docs/screenshots/invoice-detail-mobile.png)
+
+</details>
+
+See the [local demo walkthrough](docs/demo.md) for the complete browser journey,
+test-data cleanup behavior, and screenshot regeneration commands.
+
 ## Engineering highlights
 
 - Layered TypeScript design: route, service, repository, and PostgreSQL.
@@ -101,7 +116,7 @@ duplicate actions cannot both succeed.
 | Database | PostgreSQL with `pg` |
 | Financial arithmetic | `decimal.js` |
 | PDF generation | PDFKit |
-| Testing | Vitest and Supertest |
+| Testing | Vitest, Supertest, Testing Library, and Playwright |
 
 ## Architecture
 
@@ -258,6 +273,14 @@ local database:
 npm run test:integration
 ```
 
+Install the Playwright Chromium runtime once, then run the complete browser
+journey against the local PostgreSQL database:
+
+```bash
+npx playwright install chromium
+npm run test:e2e
+```
+
 Run static and production compilation checks:
 
 ```bash
@@ -270,6 +293,8 @@ The validation suite covers:
 - API unit and HTTP contract tests.
 - React workflow and PDF-download orchestration tests.
 - PostgreSQL-backed integration and permission tests.
+- Playwright end-to-end coverage for client creation, invoice creation,
+  lifecycle transitions, PDF download bytes, responsive layout, and cleanup.
 - Coverage for financial rounding, validation, rollback, access restrictions,
   unique invoice numbering, draft-only mutations, status transitions, and
   concurrent duplicate actions.
@@ -277,17 +302,19 @@ The validation suite covers:
 - A clean high-severity dependency audit.
 
 Integration tests create uniquely identified records and remove only those
-records during teardown; they do not truncate shared tables.
+records during teardown; they do not truncate shared tables. The browser E2E
+test follows the same identifier-scoped cleanup rule.
 
 ## Repository structure
 
 ```text
 .
 ├── apps/api/                 # Express API, domain logic, and tests
-├── apps/web/                 # React browser workspace and UI tests
+├── apps/web/                 # React workspace, component tests, and browser E2E
 ├── database/migrations/      # Ordered PostgreSQL migrations
 ├── database/scripts/         # Restricted-role provisioning
-├── docs/                     # Scope, architecture, API, and local setup
+├── docs/screenshots/         # Browser demo evidence
+├── docs/                     # Scope, architecture, API, demo, and local setup
 ├── .env.example              # Runtime configuration template
 ├── .env.migration.example    # Migration configuration template
 └── package.json              # Workspace commands and dependencies
@@ -303,9 +330,17 @@ records during teardown; they do not truncate shared tables.
 - [x] Invoice status lifecycle and concurrency protection
 - [x] React browser workflow with responsive loading, empty, success, and error states
 - [x] PDF generation for issued invoices
-- [ ] End-to-end browser tests
-- [ ] Screenshots, demo, and deployment documentation
-- [ ] Production-oriented authentication, authorization, and multi-tenant design
+- [x] End-to-end browser test for the client-to-PDF lifecycle
+- [x] Screenshots and local demo documentation
+
+## Future SaaS extensions
+
+These items are intentionally outside the completion criteria of the current
+local-first project:
+
+- [ ] Production authentication and session management
+- [ ] Role-based authorization and tenant isolation
+- [ ] Hosted production deployment and operations documentation
 
 ## Current limitations
 
@@ -323,9 +358,9 @@ This project demonstrates full-stack TypeScript development, responsive React
 workflows, backend API design, relational data modeling, fixed-precision
 financial calculations, PDF document generation, transaction design,
 concurrency control, input validation, security boundaries, automated testing,
-and technical documentation. Screenshots, a hosted demo, authentication, and
-deployment evidence are still required before the project can be classified as
-portfolio-ready.
+and technical documentation. The repository is portfolio-ready as a local
+full-stack prototype; hosted operations and multi-tenant SaaS controls are
+separate future milestones.
 
 ## License
 
