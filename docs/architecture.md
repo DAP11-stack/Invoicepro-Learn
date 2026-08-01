@@ -12,9 +12,9 @@
 
 ### Web application
 
-React renders client and invoice workflows. It sends raw user input to the API
-and displays API results. Browser calculations may provide previews, but only
-server totals are authoritative.
+React renders responsive client and invoice workflows through Vite. It sends
+raw user input to the API and displays API results. Browser calculations provide
+previews, but only server totals are authoritative.
 
 ### API
 
@@ -37,7 +37,7 @@ Small features may share files when separate layers add no clarity.
 
 ### Database
 
-PostgreSQL is source of truth. Planned tables:
+PostgreSQL is the persistent source of truth. Core tables:
 
 ```text
 clients
@@ -77,8 +77,8 @@ invoice_items
   position integer
 ```
 
-Exact constraints and indexes will be reviewed with real query patterns before
-the first migration.
+Constraints, indexes, enums, and role grants are applied through ordered SQL
+migrations.
 
 ## Invoice write transaction
 
@@ -126,6 +126,14 @@ and `updated_at`. This keeps the transition rule server-authoritative and makes
 duplicate concurrent actions deterministic: one action succeeds and the next
 observes the new status and returns a conflict.
 
+## PDF rendering
+
+Issued invoice PDFs are generated on demand from persisted invoice details.
+The renderer receives server-calculated decimal values, streams an A4 document,
+repeats table headers for long item lists, and reserves footer space on every
+page. Draft invoices cannot be rendered because they have not entered the
+issued lifecycle.
+
 ## Trust boundaries
 
 - Browser input is untrusted.
@@ -137,7 +145,7 @@ observes the new status and returns a conflict.
 
 ## Error contract
 
-Planned shape:
+Response shape:
 
 ```json
 {
@@ -156,18 +164,20 @@ Expected categories:
 - `CONFLICT`
 - `INVALID_STATUS_TRANSITION`
 - `INVOICE_NOT_EDITABLE`
+- `INVOICE_PDF_UNAVAILABLE`
 - `INTERNAL_ERROR`
 
 ## Testing boundaries
 
 - Unit tests: money calculations and status-transition rules.
 - Integration tests: routes, database constraints, transactions, and errors.
-- End-to-end test: full client-to-PDF browser journey.
+- Browser QA: full client-to-PDF journey and responsive desktop/mobile checks.
+- Planned end-to-end automation: persistent client-to-PDF browser journey.
 
 ## Deferred decisions
 
-- Exact UI component structure and visual design.
 - Automatic overdue scheduler versus evaluation during reads.
+- Authentication, authorization, and multi-tenant organization boundaries.
 - Public license.
 
 Each deferred choice must be settled before dependent implementation begins.
@@ -192,5 +202,5 @@ Port:     5432
 Database: invoicepro
 ```
 
-The application must not connect as the `postgres` superuser. Milestone 1 will
-create a restricted application role.
+The application connects through the restricted `invoicepro_app` role. The
+PostgreSQL administrator credential is loaded only by the migration command.

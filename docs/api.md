@@ -186,3 +186,21 @@ Relevant errors:
 
 Status validation and persistence execute while the invoice row is locked in a
 single transaction. Concurrent duplicate actions therefore cannot both succeed.
+
+## Download invoice PDF
+
+`GET /invoices/:id/pdf`
+
+The endpoint returns an A4 `application/pdf` document with an attachment file
+name derived from the invoice number. The PDF contains issuer details, client
+billing information, dates, ordered line items, server-calculated totals,
+notes, and page numbers. Long invoices repeat the table header across pages.
+
+PDF generation is available only after an invoice has left `DRAFT`, ensuring
+the downloaded document represents an issued record.
+
+Relevant errors:
+
+- `400 VALIDATION_ERROR`: the route parameter is not a UUID.
+- `404 NOT_FOUND`: no invoice has the requested UUID.
+- `409 INVOICE_PDF_UNAVAILABLE`: the invoice is still `DRAFT`.

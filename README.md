@@ -1,12 +1,13 @@
 # InvoicePro
 
-InvoicePro is a local-first REST API for managing B2B clients and invoices. It
-focuses on reliable financial calculations, explicit invoice lifecycle rules,
-transactional PostgreSQL writes, and a reproducible test suite.
+InvoicePro is a local-first web application for managing B2B clients and
+invoices. It combines a responsive React workspace with an Express API,
+server-authoritative financial calculations, transactional PostgreSQL writes,
+explicit invoice lifecycle rules, and downloadable PDF invoices.
 
-> **Project status:** Functional backend prototype. The data and API milestone
-> is complete; the browser interface, PDF generation, and deployment are still
-> in development.
+> **Project status:** Functional full-stack prototype. Client and invoice
+> workflows are usable through a browser; authentication, multi-tenancy,
+> end-to-end automation, and deployment remain in development.
 
 ## Why this project exists
 
@@ -63,6 +64,17 @@ Valid transitions are:
 `PAID` is terminal. Status changes use database row locks, so concurrent
 duplicate actions cannot both succeed.
 
+### Browser workspace and PDF delivery
+
+- Manage clients and invoices from a responsive React interface.
+- Create and edit line items with a live total preview while preserving the
+  API as the financial source of truth.
+- Filter invoices by status and client, inspect complete invoice details, and
+  run lifecycle actions from the browser.
+- Download A4 PDF documents for `SENT`, `OVERDUE`, and `PAID` invoices.
+- Repeat table headers and paginate long invoices without overlapping totals or
+  footers.
+
 ## Engineering highlights
 
 - Layered TypeScript design: route, service, repository, and PostgreSQL.
@@ -83,16 +95,21 @@ duplicate actions cannot both succeed.
 |---|---|
 | Runtime | Node.js 22+ |
 | Language | TypeScript |
+| Web | React 19 and Vite 7 |
 | API | Express 5 |
 | Validation | Zod |
 | Database | PostgreSQL with `pg` |
 | Financial arithmetic | `decimal.js` |
+| PDF generation | PDFKit |
 | Testing | Vitest and Supertest |
 
 ## Architecture
 
 ```text
-HTTP client
+React browser workspace
+    │
+    ▼
+Typed HTTP client
     │
     ▼
 Express routes ── validation and HTTP error mapping
@@ -107,9 +124,10 @@ PostgreSQL repositories ── parameterized queries and transactions
 PostgreSQL ── relational constraints and persistent source of truth
 ```
 
-The API owns invoice numbers, totals, allowed status changes, and resource
-mutation rules. PostgreSQL enforces relational integrity and stores money as
-fixed-precision numeric values.
+The React workspace handles interaction state and delegates persistent changes
+to the API. The API owns invoice numbers, totals, allowed status changes, PDF
+content, and resource mutation rules. PostgreSQL enforces relational integrity
+and stores money as fixed-precision numeric values.
 
 See [Architecture](docs/architecture.md) for the detailed design and
 [API Contract](docs/api.md) for request, response, and error behavior.
@@ -134,6 +152,7 @@ Base path: `/api/v1`
 | `POST` | `/invoices/:id/send` | Move `DRAFT` to `SENT` |
 | `POST` | `/invoices/:id/mark-overdue` | Move past-due `SENT` to `OVERDUE` |
 | `POST` | `/invoices/:id/mark-paid` | Move `SENT` or `OVERDUE` to `PAID` |
+| `GET` | `/invoices/:id/pdf` | Download an issued invoice as PDF |
 
 ## Getting started
 
@@ -190,14 +209,22 @@ Replace the placeholder passwords:
 Both real environment files are ignored by Git. The API runtime never loads
 `DATABASE_ADMIN_URL`.
 
-### 4. Apply migrations and start the API
+### 4. Apply migrations and start the application
 
 ```bash
 npm run db:migrate
 npm run dev:api
 ```
 
-The default API URL is `http://localhost:3000`. Verify it with:
+In a second terminal, start the React development server:
+
+```bash
+npm run dev:web
+```
+
+Open `http://localhost:5173` to use InvoicePro in a browser. Vite proxies
+`/api` requests to the API at `http://localhost:3000`, so both processes must
+be running during local development. Verify the API directly with:
 
 ```bash
 curl http://localhost:3000/api/v1/health
@@ -238,13 +265,15 @@ npm run typecheck
 npm run build
 ```
 
-At this revision, the validated suite contains:
+The validation suite covers:
 
-- 49 passing unit/API tests.
-- 17 passing PostgreSQL integration tests.
+- API unit and HTTP contract tests.
+- React workflow and PDF-download orchestration tests.
+- PostgreSQL-backed integration and permission tests.
 - Coverage for financial rounding, validation, rollback, access restrictions,
   unique invoice numbering, draft-only mutations, status transitions, and
   concurrent duplicate actions.
+- PDF content, headers, lifecycle restrictions, and multi-page layout checks.
 - A clean high-severity dependency audit.
 
 Integration tests create uniquely identified records and remove only those
@@ -255,6 +284,7 @@ records during teardown; they do not truncate shared tables.
 ```text
 .
 ├── apps/api/                 # Express API, domain logic, and tests
+├── apps/web/                 # React browser workspace and UI tests
 ├── database/migrations/      # Ordered PostgreSQL migrations
 ├── database/scripts/         # Restricted-role provisioning
 ├── docs/                     # Scope, architecture, API, and local setup
@@ -271,17 +301,16 @@ records during teardown; they do not truncate shared tables.
 - [x] Filtered invoice reads and complete invoice details
 - [x] Draft update/delete rules
 - [x] Invoice status lifecycle and concurrency protection
-- [ ] React browser workflow with responsive loading, empty, success, and error states
-- [ ] PDF generation for issued invoices
+- [x] React browser workflow with responsive loading, empty, success, and error states
+- [x] PDF generation for issued invoices
 - [ ] End-to-end browser tests
 - [ ] Screenshots, demo, and deployment documentation
 - [ ] Production-oriented authentication, authorization, and multi-tenant design
 
 ## Current limitations
 
-- The project currently exposes an API only; the browser UI is not implemented.
 - Overdue status is triggered through an explicit API action, not a scheduler.
-- PDF generation and email delivery are not implemented.
+- Email delivery is not implemented; PDF documents are downloaded manually.
 - Authentication, authorization, and tenant isolation are outside the current
   local MVP.
 - Discounts, partial payments, refunds, and recurring invoices are unsupported.
@@ -290,11 +319,13 @@ records during teardown; they do not truncate shared tables.
 
 ## Portfolio scope
 
-This project demonstrates backend API design, relational data modeling,
-fixed-precision financial calculations, transaction design, concurrency
-control, input validation, security boundaries, automated testing, and
-technical documentation. A browser demo and deployment evidence are still
-required before the project can be classified as portfolio-ready.
+This project demonstrates full-stack TypeScript development, responsive React
+workflows, backend API design, relational data modeling, fixed-precision
+financial calculations, PDF document generation, transaction design,
+concurrency control, input validation, security boundaries, automated testing,
+and technical documentation. Screenshots, a hosted demo, authentication, and
+deployment evidence are still required before the project can be classified as
+portfolio-ready.
 
 ## License
 
